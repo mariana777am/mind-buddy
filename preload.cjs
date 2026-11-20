@@ -1,0 +1,33 @@
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const on = ch => fn => ipcRenderer.on(ch, (e, d) => fn(d));
+contextBridge.exposeInMainWorld('buddy', {
+  info: () => ipcRenderer.invoke('info'),
+  ask: text => ipcRenderer.invoke('ask', text),
+  tts: (text, mood) => ipcRenderer.invoke('tts', { text, mood }),
+  stt: bytes => ipcRenderer.invoke('stt', bytes),
+  dropFile: file => ipcRenderer.invoke('drop-file', webUtils.getPathForFile(file)),
+  hover: over => ipcRenderer.send('hover', over),
+  drag: (dx, dy) => ipcRenderer.send('drag', { dx, dy }),
+  menu: pet => ipcRenderer.send('menu', pet),
+  storeGet: k => ipcRenderer.invoke('store-get', k),
+  storeSet: (k, v) => ipcRenderer.send('store-set', { k, v }),
+  petNote: note => ipcRenderer.send('pet-note', note),
+  fling: (vx, vy) => ipcRenderer.send('fling', { vx, vy }),
+  walk: (dx, peek) => ipcRenderer.send('walk', { dx, peek }),
+  scaleBy: d => ipcRenderer.send('scale-by', d),
+  wakeMe: () => ipcRenderer.send('wake-me'),
+  openArcade: name => ipcRenderer.send('open-arcade', name),
+  music: cmd => ipcRenderer.send('music', cmd),
+  setHandsFree: v => ipcRenderer.send('handsfree-set', v),
+  status: st => ipcRenderer.send('status', st),
+  initiativeFeedback: v => ipcRenderer.send('initiative-feedback', v),
+  open: url => ipcRenderer.send('open', url),
+  answer: (id, yes) => ipcRenderer.send('confirm-answer', { id, yes }),
+  snooze: (id, minutes) => ipcRenderer.send('snooze', { id, minutes }),
+  on: {
+    info: on('info'), say: on('say'), cursor: on('cursor'), sleep: on('sleep'), wake: on('wake'), thinking: on('thinking'),
+    working: on('working'), fixed: on('fixed'), alert: on('alert'), confirm: on('confirm'), type: on('type'),
+    listenToggle: on('listen-toggle'), help: on('help'), handsfree: on('handsfree'), cmd: on('cmd'), lateAnswer: on('late-answer'), thinkingDone: on('thinking-done'), arcade: on('arcade'), music: on('music'), activity: on('activity'), bump: on('bump'), landed: on('landed'),
+    announce: on('announce'), walking: on('walking'), walked: on('walked'), peekaboo: on('peekaboo'), scale: on('scale'),
+  },
+});

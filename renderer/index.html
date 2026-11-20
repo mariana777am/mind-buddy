@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; media-src 'self' blob:; img-src 'self' data:">
+<title>Minds Buddy</title>
+<style>
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif}
+  #cv{position:absolute;left:0;bottom:0;width:280px;height:230px}
+  #bubble{position:absolute;left:10px;right:10px;bottom:212px;background:#fffdf5;color:#1d2240;border-radius:20px;padding:11px 14px 12px;font-size:14.5px;line-height:1.38;
+    box-shadow:0 4px 0 #1d224022,0 10px 28px #0006;border:2.5px solid #1d2240;transform-origin:70% 100%;transform:scale(.4) translateY(30px);opacity:0;
+    transition:transform .28s cubic-bezier(.3,1.6,.5,1),opacity .2s;pointer-events:none;max-height:calc(100vh - 226px);overflow-y:auto}
+  #bubble.show{transform:none;opacity:1;pointer-events:auto}
+  #bubble::-webkit-scrollbar{width:5px}#bubble::-webkit-scrollbar-thumb{background:#1d224044;border-radius:9px}
+  #tail{position:absolute;left:150px;bottom:198px;width:18px;height:18px;background:#fffdf5;border-right:2.5px solid #1d2240;border-bottom:2.5px solid #1d2240;transform:rotate(45deg) scale(0);transition:transform .2s;z-index:2}
+  #tail.show{transform:rotate(45deg) scale(1)}
+  .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;border-radius:99px;padding:2px 8px;margin-bottom:5px;color:#fff;background:#3b7bff}
+  .tag.meet{background:#ff7a1a}.tag.rem{background:#e8457c}.tag.fix{background:#18b47a}.tag.q{background:#7b5cff}
+  .btns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .btns button{border:2px solid #1d2240;border-radius:12px;background:#ffd84d;color:#1d2240;font-weight:800;font-size:12.5px;padding:5px 11px;cursor:pointer;box-shadow:0 2px 0 #1d2240}
+  .btns button.alt{background:#fff}.btns button:active{transform:translateY(2px);box-shadow:none}
+  .more{color:#3b7bff;font-size:12px;cursor:pointer;text-decoration:underline;margin-top:4px;display:inline-block}
+  pre.recent{white-space:pre-wrap;font:12px/1.35 "Segoe UI",system-ui;margin:6px 0 0;color:#454a6b}
+  #ask{position:absolute;left:14px;right:14px;bottom:6px;display:none;z-index:5}
+  #ask input{width:100%;box-sizing:border-box;border:2.5px solid #1d2240;border-radius:99px;padding:8px 14px;font-size:14px;outline:none;background:#fffdf5;color:#1d2240;box-shadow:0 3px 0 #1d2240}
+  #chip{position:absolute;right:12px;bottom:10px;font-size:10.5px;font-weight:800;color:#fff;background:#1d2240cc;border-radius:99px;padding:2px 8px;opacity:0;transition:opacity .3s;pointer-events:none}
+  #chip.show{opacity:1}
+  #needs{position:absolute;left:50%;bottom:218px;transform:translateX(-50%) scale(.9);display:flex;gap:5px;align-items:center;background:#1d2240e6;color:#fff;border-radius:99px;padding:4px 9px;font-size:11px;font-weight:800;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;z-index:3}
+  #needs.show{opacity:1;transform:translateX(-50%) scale(1)}
+  #needs .n{display:flex;align-items:center;gap:2px}#needs .bar{width:22px;height:5px;border-radius:9px;background:#ffffff30;overflow:hidden}#needs .bar i{display:block;height:100%;border-radius:9px}
+  #needs .lv{background:#ffd84d;color:#1d2240;border-radius:99px;padding:0 6px}
+  .choices{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.choices button{font-size:20px;padding:4px 9px}
+  .dots span{display:inline-block;animation:dot 1s infinite}.dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
+  @keyframes dot{0%,60%,100%{transform:none}30%{transform:translateY(-5px)}}
+</style>
+</head>
+<body>
+<canvas id="fx" style="position:absolute;left:0;top:0;width:280px;height:360px;pointer-events:none"></canvas>
+<canvas id="dream" style="position:absolute;left:0;top:0;width:280px;height:360px;pointer-events:none"></canvas>
+<div id="bubble"></div><div id="tail"></div>
+<canvas id="cv" width="560" height="460"></canvas>
+<div id="ask"><input id="askIn" placeholder="Ask me anything… (Esc to close)" maxlength="2000"></div>
+<div id="chip"></div>
+<div id="needs"></div>
+<script src="announce.js"></script>
+<script src="buddy.js"></script>
+<script src="pet.js"></script>
+<script src="scenes.js"></script>
+<script src="dreams.js"></script>
+</body>
+</html>

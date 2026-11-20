@@ -1,0 +1,50 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Announcement voice</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.4 "Segoe UI",system-ui,sans-serif;color:#dff4ff;background:radial-gradient(120% 90% at 50% 0%,#14305a 0%,#0a1328 55%,#060a16 100%);min-height:100vh;padding:18px 20px 22px}
+  h1{font-size:18px;margin:0 0 2px;letter-spacing:.02em;color:#9fe6ff;text-shadow:0 0 12px #3fc3ff88}
+  .sub{color:#8fb3cc;font-size:12.5px;margin-bottom:14px}
+  h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.12em;color:#6fd0ff;margin:16px 0 7px}
+  .row{display:flex;flex-wrap:wrap;gap:7px}
+  button{font:inherit;cursor:pointer;border:1.5px solid #3fc3ff55;background:#0f2242;color:#cfeeff;border-radius:11px;padding:7px 11px;transition:.15s}
+  button:hover{border-color:#3fc3ffaa;background:#132c55}
+  button.on{background:linear-gradient(180deg,#2aa7ff,#1677e6);color:#fff;border-color:#9fe6ff;box-shadow:0 0 14px #2aa7ff88}
+  .voices button{display:flex;align-items:center;gap:6px;text-align:left}
+  .voices small{opacity:.65}
+  textarea{width:100%;height:58px;resize:none;border-radius:11px;border:1.5px solid #3fc3ff44;background:#081428;color:#dff4ff;font:inherit;padding:8px 10px}
+  label.tg{display:flex;align-items:center;gap:8px;margin-top:8px;color:#bfe3f7;font-size:13px;cursor:pointer}
+  .bar{display:flex;gap:9px;margin-top:18px}
+  .big{flex:1;padding:11px;font-size:15px;font-weight:600;border-radius:13px}
+  .play{background:#10294d}
+  .keep{background:linear-gradient(180deg,#ffb23f,#ff8a1f);border-color:#ffd59a;color:#2b1600}
+  .keep:hover{background:linear-gradient(180deg,#ffc25f,#ff9a3a)}
+  .hint{margin-top:12px;font-size:11.5px;color:#7f9fb8}
+  .wave{display:inline-block;width:10px;height:10px;border-radius:50%;background:#3fc3ff;box-shadow:0 0 8px #3fc3ff;opacity:0}
+  .playing .wave{animation:p 1s infinite}
+  @keyframes p{0%,100%{opacity:.2;transform:scale(.7)}50%{opacity:1;transform:scale(1.1)}}
+  .saved{color:#8dffb8;font-weight:600;margin-top:10px;min-height:20px}
+</style></head>
+<body>
+  <h1>📢 Pick my announcement voice</h1>
+  <div class="sub">This free Windows voice reads the things I say on my own (reminders, pet stuff, ideas). Answers to your questions keep the ElevenLabs voice. Click anything to hear it.</div>
+
+  <h2>Voice</h2><div class="row voices" id="voices"></div>
+  <h2>Style</h2><div class="row" id="styles"></div>
+  <h2>Chime</h2><div class="row" id="chimes"></div>
+  <label class="tg"><input type="checkbox" id="opener" checked> Start with an opening line ("Attention please…")</label>
+
+  <h2>Test sentence</h2>
+  <textarea id="sample">Your buddy is feeling hungry. A cookie would be very much appreciated. Thank you.</textarea>
+
+  <div class="bar">
+    <button class="big play" id="play"><span class="wave"></span> ▶ Play announcement</button>
+    <button class="big keep" id="keep">✅ Use this one</button>
+  </div>
+  <div class="saved" id="saved"></div>
+  <div class="hint">Only a few voices? Windows Settings → Time &amp; language → Speech → Add voices, then restart the buddy. Some newer voices may still not show up here.</div>
+<script src="announce.js"></script>
+<script src="voice-picker.js"></script>
+</body></html>

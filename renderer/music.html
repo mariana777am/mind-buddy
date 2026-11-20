@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' https: http: data:; media-src * blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<title>Buddy Music</title>
+<style>
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;color:#e8f4ff}
+  #bg{position:absolute;inset:0;width:100%;height:100%}
+  #drag{position:absolute;left:40px;right:60px;top:8px;height:30px;-webkit-app-region:drag;z-index:5}
+  #close{position:absolute;right:26px;top:22px;width:24px;height:24px;border-radius:50%;border:1px solid #9fe6ff66;background:#0a1440aa;color:#bfe9ff;font-size:13px;cursor:pointer;z-index:6;line-height:20px;padding:0}
+  #close:hover{background:#ff4f8b55;color:#fff}
+  #ui{position:absolute;left:30px;right:30px;top:24px;bottom:24px;display:grid;grid-template-columns:262px 1fr;grid-template-rows:auto 1fr auto;gap:12px 18px;z-index:2}
+  #head{grid-column:1/3;display:flex;align-items:center;gap:10px;min-height:34px;padding-right:34px}
+  #badge{font-size:10px;font-weight:700;letter-spacing:.2em;padding:4px 10px;border-radius:99px;border:1px solid #9fe6ff66;color:#9fe6ff;box-shadow:0 0 12px #3fb5ff44;white-space:nowrap}
+  #badge.radio{color:#ffb8e6;border-color:#ff9bd066;box-shadow:0 0 12px #ff7ad944}
+  #np{flex:1;min-width:0}
+  #title{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 12px #7ad7ff88}
+  #sub{font-size:12px;color:#9fb8e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.04em}
+  #media{position:relative;width:262px;height:202px;border-radius:16px;overflow:hidden;border:1px solid #9fe6ff55;box-shadow:0 0 24px #3fb5ff44,inset 0 0 20px #3fb5ff22;background:#030616}
+  #yt{position:absolute;left:1px;top:1px;width:260px;height:200px}
+  #radioArt{position:absolute;inset:0;display:none;align-items:center;justify-content:center}
+  #radioArt canvas{position:absolute;inset:0;width:100%;height:100%}
+  #radioArt img{position:relative;width:74px;height:74px;border-radius:50%;object-fit:cover;background:#0b1850;box-shadow:0 0 26px #ff7ad988;border:1px solid #ffb8e666}
+  #lyrics{position:relative;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent);mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent)}
+  #lines{position:absolute;left:0;right:0;top:50%;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+  .ln{font-size:15px;line-height:1.35;padding:5px 0;color:#9fb8e8;opacity:.42;transition:all .35s;transform-origin:left center}
+  .ln.cur{color:#fff;opacity:1;font-size:21px;font-weight:600;text-shadow:0 0 14px #7ad7ff,0 0 32px #b48cffaa}
+  .ln.near{opacity:.7}
+  #msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:#9fb8e8;font-size:14px;padding:0 10px;line-height:1.5}
+  #ctrl{grid-column:1/3;display:flex;align-items:center;gap:10px}
+  #ctrl button{width:38px;height:38px;border-radius:50%;border:1px solid #9fe6ff55;background:#0b1850aa;color:#e8f4ff;font-size:15px;cursor:pointer;box-shadow:0 0 12px #3fb5ff33;transition:.15s}
+  #ctrl button:hover{border-color:#e6b8ff;box-shadow:0 0 18px #b48cff88}
+  #ctrl #play{width:46px;height:46px;font-size:18px;background:linear-gradient(135deg,#2fb6ff,#9a6bff);border-color:transparent}
+  #vol{width:110px;accent-color:#7ad7ff}
+  #next-up{flex:1;font-size:11.5px;color:#8fb0e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;letter-spacing:.03em}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div id="drag"></div><button id="close" title="Close">✕</button>
+<div id="ui">
+  <div id="head"><span id="badge">MUSIC</span><div id="np"><div id="title">Buddy Music</div><div id="sub">Ask me to play something</div></div></div>
+  <div id="media"><div id="yt"></div><div id="radioArt"><canvas id="viz"></canvas><img id="logo" alt=""></div></div>
+  <div id="lyrics"><div id="lines"></div><div id="msg">♪</div></div>
+  <div id="ctrl"><button id="prev" title="Previous">⏮</button><button id="play" title="Play / pause">⏯</button><button id="next" title="Next">⏭</button>
+    <span style="font-size:13px">🔊</span><input id="vol" type="range" min="0" max="100" value="70"><div id="next-up"></div></div>
+</div>
+<script src="music.js"></script>
+</body>
+</html>
