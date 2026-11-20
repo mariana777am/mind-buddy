@@ -168,3 +168,18 @@ On build.hellominds.ai you can add to your Mind's instructions:
 `main.js` app, hotkeys, sleep/wake, meeting alerts · `lib/brain.js` talk loop and tags · `lib/minds.js` your Mind (official library) ·
 `lib/google.js` Calendar + Drive · `lib/winwatch.js` Windows window/copy/paste helper · `lib/store.js` timeline and reminders ·
 `renderer/` the character · `test/unit.test.mjs` checks (`npm test`).
+
+## Minds CLI helper (`node mind.mjs …`)
+Uses the official Minds CLI (`@animocabrands/minds-cli`, installed by `npm install`) with your `.env` key and Mind:
+
+| Command | What it does |
+|---|---|
+| `node mind.mjs doctor` | checks the key and setup |
+| `node mind.mjs status` | Mind on/off, cognition balance, today's usage by tool |
+| `node mind.mjs usage week` | which tools used the most cognition (day / week / month) |
+| `node mind.mjs skills` / `apps` | what your Mind has equipped |
+| `node mind.mjs bazaar "weather"` | find skills/apps; add with `equip-skill <id>` / `equip-app <id>` |
+| `node mind.mjs history 20` | the last messages between the buddy and your Mind |
+| `node mind.mjs ask "Hi!"` | one message on a separate test chat |
+| `node mind.mjs selftest` | 3 checks that your Mind follows the buddy's rules (mood tags, reminders, arcade level design) |
+| `node mind.mjs raw <args>` | any other CLI command, e.g. `raw circle list` |
