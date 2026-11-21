@@ -13,7 +13,7 @@ import { createMusic } from './lib/music.js';
 import { relayStream } from './lib/streamproxy.js';
 import { createHabits } from './lib/habits.js';
 import { parseDream, dreamPrompt, dreamFormatPart } from './lib/dreamspec.js';
-import { createEvolution, evolutionPrompt, parseEvolution, ideasMarkdown, GAMES as EVO_GAMES } from './lib/evolution.js';
+import { createEvolution, evolutionPrompt, parseEvolution, ideasMarkdown, GAMES as EVO_GAMES, blindboxPrompt, parseBlindbox, localBlindbox, RARITY } from './lib/evolution.js';
 await import('./renderer/arcade-design.js');                      // the arcade's twists, so weekly quests only use real ones
 const TWISTS = globalThis.ArcadeDesign.TWISTS;
 import http from 'node:http';
@@ -366,6 +366,7 @@ ipcMain.on('menu', (e, pet = {}) => {
       { label: evo.quest() ? `⭐ This week: ${evo.quest().name} (${EVO_GAMES[evo.quest().game]})` : 'No quest right now', enabled: !!evo.quest(), click: () => evo.quest() && openArcade(evo.quest().game) },
       { label: `💡 Upgrade ideas (${evo.data.ideas.filter(i => i.status === 'approved').length} approved) — open IDEAS.md`, click: () => { writeIdeas(); shell.openPath(path.join(DIR, 'IDEAS.md')); } },
       { label: `${evo.data.history.length} evolutions so far`, enabled: false }] },
+    ...(pet.boxes ? [{ label: `🎁 Open blind box (${pet.boxes})`, click: cmd('openbox') }] : []),
     { label: '🔊 Sound effects', type: 'checkbox', checked: settings.sounds !== false, click: () => { settings.sounds = settings.sounds === false; writeJson('settings', settings); toUI('info', info()); } },
     { type: 'separator' },
     { label: google.connected() ? '✅ Google connected — disconnect' : '🔗 Connect Google Calendar + Drive', click: () => google.connected() ? (google.disconnect(), toUI('info', info())) : connectGoogle() },
@@ -541,6 +542,16 @@ async function runEvolution(force = false){
     toUI('evolution', { ...ev, id, gameLabel: EVO_GAMES[ev.quest.game] });
   } catch (e){ log('evolution failed:', e.message); } finally { evoBusy = false; }
 }
+// a blind box was earned: the Mind designs the surprise (1 message); a built-in designer covers when it's busy
+ipcMain.on('blindbox', async (e, { id, rarity, owned = [] } = {}) => {
+  if (!RARITY[rarity]) rarity = 'common';
+  const lately = habits.summary({ facts: profile.facts, dogName: E.DOG_NAME || settings.dogName || '' });
+  let box = null;
+  if (provider() !== 'mock') { try { box = parseBlindbox(await ask('blindbox', blindboxPrompt({ lately, rarity, owned })), rarity); } catch (err){ log('blind box failed:', err.message); } }
+  if (!box) { box = localBlindbox(rarity, lately); log('🎁 blind box: built-in design (the Mind was busy)'); }
+  log('🎁 blind box', rarity, '|', box.outfit.series, '·', box.outfit.name, box.outfit.kind, box.outfit.color, box.outfit.badge, '|', box.why);
+  toUI('blindbox-ready', { id, ...box });
+});
 ipcMain.on('idea-answer', (e, { id, yes }) => { const i = evo.answerIdea(id, yes); if (!i) return; writeIdeas(); log('💡 idea', yes ? 'approved:' : 'skipped:', i.text); });
 ipcMain.handle('arcade-weekly', () => { const q = evo.quest(); return q ? { game: q.game, twist: q.twist, name: q.name } : null; });
 async function dreamNow(){

@@ -31,4 +31,13 @@ ok(2, 'first evolution a day after install, then weekly; quest wins once; approv
 const p = evolutionPrompt({ lately: 'Music this week: 12 plays (titles in Chinese ×9)', petLevel: 4, outfits: ['Lantern Cap'], dreams: ['Sakura lake'], history: E.historyText(), ideas: E.ideasText(), twists: TWISTS, dreamFormat: dreamFormatPart() });
 assert.match(p, /Chinese ×9/); assert.match(p, /Lantern Cap/); assert.match(p, /approved/); assert.ok(KINDS.every(k => p.includes(k))); assert.match(p, /goldrush/); assert.match(p, /PALETTE:/);
 ok(3, 'the weekly message includes her week, past evolutions and her answers to past ideas');
-console.log('\nAll 3 evolution checks passed.');
+// 4. blind boxes
+{ const { parseBlindbox, localBlindbox, rollRarity, blindboxPrompt } = await import('../lib/evolution.js');
+  const bb = parseBlindbox('SERIES: Night Market | OUTFIT: Lantern Cap | KIND: baseball cap | COLOR: cherry | BADGE: 🏮 | LINE: Mandopop week, lantern cap! | WHY: Mandarin songs', 'super');
+  assert.equal(bb.outfit.kind, 'cap'); assert.equal(bb.outfit.series, 'Night Market'); assert.equal(bb.outfit.rarity, 'super'); assert.match(bb.outfit.id, /^evo:lantern-cap-/);
+  assert.equal(parseBlindbox('a surprise!', 'rare'), null);
+  const lb = localBlindbox('rare', 'Music this week: titles in Chinese ×4'); assert.equal(lb.outfit.badge, '🏮'); assert.equal(lb.outfit.rarity, 'rare');
+  assert.equal(rollRarity(.01), 'secret'); assert.equal(rollRarity(.1), 'super'); assert.equal(rollRarity(.3), 'rare'); assert.equal(rollRarity(.9), 'common');
+  assert.match(blindboxPrompt({ lately: 'x', rarity: 'secret', owned: ['Lantern Cap'] }), /rarest/);
+  ok(4, 'blind boxes: Mind design parsed with series and rarity; a built-in surprise when the Mind is busy'); }
+console.log('\nAll 4 evolution checks passed.');

@@ -20,7 +20,7 @@ const COLORS = { classic: ['#3a3f4f', '#202431', '#2a2e3b'], pink: ['#ef6aa7', '
 const xpFor = L => 40 * L * L;                                     // XP needed to reach level L+1
 
 const P = Object.assign({ snack: 80, fun: 80, love: 80, energy: 80, xp: 0, level: 1, streak: 0, lastDay: '', wearing: null, color: 'classic',
-  focusDone: 0, focus: null, last: Date.now(), born: Date.now(), wins: 0, flags: {}, evo: [] }, {});
+  focusDone: 0, focus: null, last: Date.now(), born: Date.now(), wins: 0, flags: {}, evo: [], boxes: [] }, {});
 let loaded = false, saveT = null, lastTouch = now(), lastNag = 0, muteUntil = 0, inCall = false, callSeen = 0;
 const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { P.last = Date.now(); B.storeSet?.('pet', P); sendNote(); }, 400); };
 const clamp = v => Math.max(5, Math.min(100, v));
@@ -85,6 +85,7 @@ function gainXp(n, announce = true){
   while (P.xp >= xpFor(P.level)) {
     P.xp -= xpFor(P.level); P.level++;
     const un = UNLOCKS.filter(u => u.level === P.level);
+    if (P.level >= 3 && (un.length === 0 || Math.random() < .4)) setTimeout(() => earnBox('level ' + P.level), 6000);   // sometimes the reward is a blind box
     if (announce) later(() => { sfx('fanfare'); act('cheer'); burst(['🎉', '⭐', '✨', '🎊'], 22);
       say({ text: `LEVEL UP! I'm level ${P.level}!` + (un.length ? ` I unlocked ${un.map(u => u.label.replace(/^\S+\s/, '')).join(' and ')}! Check my Wardrobe.` : ' Woohoo!'), mood: 'excited', action: 'cheer' }); });
   }
@@ -139,9 +140,9 @@ B.on.bump?.(({ side, speed }) => { sfx('bounce', Math.min(1, speed / 30)); S.pok
 B.on.landed?.(({ bumps }) => { if (!flying) return; flying = false; act('jump'); sfx('pop');
   show(bumps > 2 ? ['Wheee! AGAIN! AGAIN!', 'That was AMAZING! Do it again!', 'I\'m a bouncy ball! Boing boing!'][Math.floor(Math.random() * 3)] : 'Whee! Hehe.', { ms: 2800 });
   bump({ fun: 8 }, 3); if (bumps > 3) { S.dizzy = now() + 1800; } });
-function overHand(x, y){ return S.hand > .3 && (x - (HX + R + 14)) ** 2 + (y - (HY - 26)) ** 2 < 24 ** 2; }
+function overHand(x, y){ const h = window.HANDPOS || { x: HX + R + 16, y: HY - 8 }; return S.hand > .3 && (x - h.x) ** 2 + (y - h.y) ** 2 < 26 ** 2; }
 function highFive(){ sfx('clap'); burst(['🙌', '💥', '✨'], 10); S.handT = 0; act('cheer'); show(['Boom! 🙌', 'Up top! Yesss!', 'High five! We\'re unstoppable!'][Math.floor(Math.random() * 3)], { ms: 2400 }); bump({ love: 5, fun: 4 }, 3); }
-function offerHighFive(){ act('wave', 3800); S.handT = 1; show('Up top! ✋ Click my hand!', { ms: 3800 }); }
+function offerHighFive(){ act('wave', 3800); S.gesture = 'five'; S.handT = 1; show('Up top! ✋ Click my hand!', { ms: 3800 }); }
 B.on.peekaboo?.(() => { act('jump'); sfx('pop'); S.eyeStyle = 'stars'; S.eyeUntil = now() + 1500; show(['Boo! 👻 Did you miss me?', 'Peekaboo! I see you!', 'I\'m baaack!'][Math.floor(Math.random() * 3)], { ms: 3000 }); });
 function poked(){ sfx('boop'); lastTouch = now(); bump({ love: 1, fun: 1 }); }
 
@@ -467,10 +468,12 @@ B.on.cmd?.(({ type, arg }) => {
   if (S.asleep && type !== 'stats' && type !== 'wear' && type !== 'color') { B.wakeMe?.(); S.asleep = false; S.slipT = 0; document.body.style.opacity = '1'; }
   if (type === 'feed') feed(arg); if (type === 'play') play(arg); if (type === 'focus') startFocus(arg); if (type === 'stats') stats();
   if (type === 'wear') { P.wearing = arg; save(); sfx('pop'); burst(['✨'], 6); show(arg ? 'Ooh, how do I look? 😎' : 'Back to basics!', { ms: 2200 }); }
+  if (type === 'openbox') openBox();
   if (type === 'color') { P.color = arg; applyColor(); save(); sfx('pop'); burst(['✨'], 6); show('Fresh new headset! 🎧', { ms: 2200 }); }
 });
 bubble.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.pet === 'openbox') { openBox(); return; }
   if (b.dataset.pet === 'idea-yes' || b.dataset.pet === 'idea-no') { const yes = b.dataset.pet === 'idea-yes'; B.ideaAnswer?.(b.dataset.arg, yes); sfx(yes ? 'ding' : 'boop');
     const box = b.closest('.btns'); if (box) box.outerHTML = `<div class="btns"><i>${yes ? '👍 Added to my upgrade list (IDEAS.md)!' : 'Okay, maybe another time!'}</i> <button data-pet="arcade" data-arg="${esc(b.dataset.game || '')}">🕹️ Play the quest</button></div>`;
     if (yes) { act('cheer'); burst(['💡', '✨'], 10); } return; }
@@ -486,7 +489,8 @@ bubble.addEventListener('click', e => {
 function menuState(){
   const un = UNLOCKS.filter(u => u.level <= P.level), next = UNLOCKS.find(u => u.level > P.level);
   return { level: P.level, focusing: !!P.focus, wearing: P.wearing, color: P.color,
-    unlocked: [...un.filter(u => u.id).map(u => ({ id: u.id, label: u.label })), ...(P.evo || []).map(o => ({ id: o.id, label: `✨ ${o.badge ? o.badge + ' ' : ''}${o.name}` }))],
+    unlocked: [...un.filter(u => u.id).map(u => ({ id: u.id, label: u.label })), ...(P.evo || []).map(o => ({ id: o.id, label: `${o.rarity ? RSTARS[o.rarity] : '✨'} ${o.badge ? o.badge + ' ' : ''}${o.name}${o.series ? ' · ' + o.series : ''}` }))],
+    boxes: (P.boxes || []).length,
     colors: [{ id: 'classic', label: '🎧 Classic' }, ...un.filter(u => u.color).map(u => ({ id: u.color, label: u.label }))],
     nextUnlock: next ? `Next: ${next.label} at level ${next.level}` : 'Everything unlocked! 🏆' };
 }
@@ -541,10 +545,74 @@ function drawEvo(cx, t, R, o, ey){
       cx.fillStyle = '#ffd84d'; cx.beginPath(); cx.arc(x, y, R * .05, 0, 7); cx.fill(); } badge(0, -R * 1.12, .22); }
   if (o.kind === 'scarf') { cx.fillStyle = c1; cx.beginPath(); cx.roundRect(-R * .72, R * .84, R * 1.44, R * .26, R * .12); cx.fill();
     cx.beginPath(); cx.roundRect(R * .3, R * .9, R * .24, R * .5, R * .08); cx.fill(); cx.fillStyle = c2; for (let i = -2; i <= 2; i++) cx.fillRect(i * R * .26 - R * .04, R * .86, R * .08, R * .22); badge(-R * .3, R * .97, .2); }
-  if (o.kind === 'visor') { const g = cx.createLinearGradient(-R * .8, 0, R * .8, 0); g.addColorStop(0, c1); g.addColorStop(1, c2); cx.globalAlpha = .82; cx.fillStyle = g;
+  if (o.kind === 'visor') { const F = window.FACE; if (F) { cx.translate((F.L.c[0] + F.R.c[0]) / 2, 0); ey = (F.L.c[1] + F.R.c[1]) / 2; }
+    const g = cx.createLinearGradient(-R * .8, 0, R * .8, 0); g.addColorStop(0, c1); g.addColorStop(1, c2); cx.globalAlpha = .82; cx.fillStyle = g;
     cx.beginPath(); cx.roundRect(-R * .78, ey - R * .16, R * 1.56, R * .32, R * .16); cx.fill(); cx.globalAlpha = .7; cx.strokeStyle = '#ffffff'; cx.lineWidth = 2;
     cx.beginPath(); cx.moveTo(-R * .55, ey - R * .07); cx.lineTo(-R * .1, ey - R * .07); cx.stroke(); cx.globalAlpha = 1; badge(R * .62, ey - R * .26, .18); }
+  if (o.rarity === 'super' || o.rarity === 'secret') {                          // rare finds sparkle
+    for (let i = 0; i < 5; i++){ const a = t / 900 + i * 1.26, rr = R * 1.15, k = .5 + .5 * Math.sin(t / 200 + i * 2);
+      cx.fillStyle = o.rarity === 'secret' ? `hsla(${(t / 8 + i * 70) % 360},100%,75%,${k})` : `rgba(255,224,120,${k})`;
+      cx.beginPath(); const sx = Math.cos(a) * rr, sy = Math.sin(a) * rr * .8 - R * .2; for (let j = 0; j < 8; j++){ const q = j * Math.PI / 4, l = j % 2 ? 1.2 : 3.6; cx.lineTo(sx + Math.cos(q) * l, sy + Math.sin(q) * l); } cx.fill(); } }
   cx.restore();
+}
+
+// ---------- blind boxes: a mystery outfit your Mind designs from your habits ----------
+const RSTARS = { common: '★', rare: '★★', super: '★★★', secret: '✦' }, RNAME = { common: 'Common', rare: 'Rare', super: 'Super Rare', secret: 'SECRET' };
+const RCOL = { common: '#9fd8ff', rare: '#b48cff', super: '#ffd84d', secret: '#ff7ad9' };
+let boxAnim = null;                                                   // { phase: 'shake' | 'pop', t0, box }
+function rollRarity(){ const r = Math.random(); return r < .03 ? 'secret' : r < .15 ? 'super' : r < .45 ? 'rare' : 'common'; }
+function earnBox(why){
+  const box = { id: Date.now().toString(36), rarity: rollRarity(), t: Date.now(), why, design: null };
+  (P.boxes ||= []).push(box); save(); window.__lastBox = box.id;
+  B.blindbox?.({ id: box.id, rarity: box.rarity, owned: (P.evo || []).map(o => o.name) });
+  later(() => { sfx('ding'); act('jump'); burst(['🎁', '❓', '✨'], 12);
+    show(`<span class="tag q">🎁 blind box</span><br>You earned a <b>blind box</b>! Something inside was designed by your Mind, just from your week…` +
+      `<div class="btns"><button data-pet="openbox">Open it!</button><button class="alt" data-pet="later">Later</button></div>`, { stick: true }); });
+}
+B.on.blindboxReady?.(r => { const b = (P.boxes || []).find(x => x.id === r.id); if (!b) return; b.design = r; save(); if (boxAnim?.box === b && boxAnim.phase === 'wait') reveal(b); });
+function openBox(){
+  const b = (P.boxes || [])[0]; if (!b || boxAnim) return;
+  sfx('boop'); boxAnim = { phase: 'shake', t0: now(), box: b }; forceHide();
+  setTimeout(() => { if (b.design) reveal(b); else { boxAnim.phase = 'wait'; show('Your Mind is putting the finishing touches on it… 🎁', { ms: 6000 });
+    if (!b.asked) { b.asked = true; B.blindbox?.({ id: b.id, rarity: b.rarity, owned: (P.evo || []).map(o => o.name) }); } } }, 1300);
+}
+function reveal(b){
+  const d = b.design, o = { ...d.outfit, rarity: b.rarity };
+  boxAnim = { phase: 'pop', t0: now(), box: b, col: RCOL[b.rarity] };
+  P.boxes = P.boxes.filter(x => x !== b); if (!(P.evo ||= []).some(x => x.id === o.id)) P.evo.push(o); P.wearing = o.id; gainXp(b.rarity === 'secret' ? 60 : b.rarity === 'super' ? 40 : 20); save();
+  sfx('fanfare'); act('cheer'); burst(b.rarity === 'secret' ? ['💖', '🌈', '✨', '👑'] : b.rarity === 'super' ? ['⭐', '✨', '🌟'] : ['✨', '🎉'], b.rarity === 'common' ? 12 : 24);
+  show(`<span class="tag q" style="background:${RCOL[b.rarity]};color:#1b1f3a">${RSTARS[b.rarity]} ${RNAME[b.rarity]}</span><br><b>${esc((o.badge ? o.badge + ' ' : '') + o.name)}</b> <i>· ${esc(o.series)}</i>` +
+    (d.line ? `<div style="margin-top:4px">${esc(d.line)}</div>` : '') + (d.why ? `<div style="margin-top:2px;opacity:.7;font-size:.9em">Inspired by: ${esc(d.why)}</div>` : '') +
+    ((P.boxes || []).length ? `<div class="btns"><button data-pet="openbox">Open the next one (${P.boxes.length})</button></div>` : ''), { stick: true });
+  setTimeout(() => { boxAnim = null; }, 1600);
+}
+function drawBox(cx, t, bx, by, s, rot, lidUp, glow){
+  cx.save(); cx.translate(bx, by); cx.rotate(rot); cx.scale(s, s);
+  if (glow) { cx.save(); cx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 10; i++){ const a = i / 10 * 6.283 + t / 600; cx.fillStyle = glow + '55';
+      cx.beginPath(); cx.moveTo(0, -10); cx.lineTo(Math.cos(a - .12) * 70, -10 + Math.sin(a - .12) * 70); cx.lineTo(Math.cos(a + .12) * 70, -10 + Math.sin(a + .12) * 70); cx.fill(); } cx.restore(); }
+  cx.shadowColor = 'rgba(0,10,40,.45)'; cx.shadowBlur = 8; cx.shadowOffsetY = 4;
+  const front = cx.createLinearGradient(-14, 0, 14, 0); front.addColorStop(0, '#8b5cf6'); front.addColorStop(1, '#6d28d9');
+  cx.fillStyle = front; cx.beginPath(); cx.roundRect(-14, -12, 22, 24, 3); cx.fill(); cx.shadowColor = 'transparent';
+  const side = cx.createLinearGradient(8, 0, 16, 0); side.addColorStop(0, '#5b21b6'); side.addColorStop(1, '#3b0f86');
+  cx.fillStyle = side; cx.beginPath(); cx.moveTo(8, -12); cx.lineTo(16, -17); cx.lineTo(16, 7); cx.lineTo(8, 12); cx.fill();
+  cx.fillStyle = '#ff7ad9'; cx.fillRect(-5, -12, 5, 24); cx.beginPath(); cx.moveTo(10, -13); cx.lineTo(13, -15); cx.lineTo(13, 9); cx.lineTo(10, 11); cx.fill();
+  cx.fillStyle = '#ffffff'; cx.font = 'bold 13px system-ui'; cx.textAlign = 'center'; cx.fillText('?', -8.5, 5); cx.fillText('?', 5, 5);
+  cx.save(); cx.translate(0, -lidUp); cx.rotate(-lidUp / 60);                       // the lid (+ bow) flies off when it opens
+  const lid = cx.createLinearGradient(0, -20, 0, -12); lid.addColorStop(0, '#c4a6ff'); lid.addColorStop(1, '#8b5cf6');
+  cx.fillStyle = lid; cx.beginPath(); cx.moveTo(-16, -12); cx.lineTo(10, -12); cx.lineTo(18, -17); cx.lineTo(-8, -17); cx.closePath(); cx.fill();
+  cx.fillStyle = '#ff7ad9'; cx.beginPath(); cx.ellipse(-6, -19, 6, 3.5, -.5, 0, 7); cx.ellipse(2, -19, 6, 3.5, .5, 0, 7); cx.fill();
+  cx.fillStyle = '#ffd1ec'; cx.beginPath(); cx.arc(-2, -18, 2.2, 0, 7); cx.fill(); cx.restore();
+  cx.restore();
+}
+function drawBoxes(cx, t, x, y, R){
+  const n = (P.boxes || []).length; if (!n && !boxAnim) return;
+  const bx = x - R - 26, by = 196;
+  if (!boxAnim) { drawBox(cx, t, bx, by - Math.abs(Math.sin(t / 380)) * 4, 1, Math.sin(t / 700) * .06, 0, null);
+    if (n > 1) { cx.save(); cx.fillStyle = '#ff4d79'; cx.beginPath(); cx.arc(bx + 16, by - 22, 7, 0, 7); cx.fill(); cx.fillStyle = '#fff'; cx.font = 'bold 9px system-ui'; cx.textAlign = 'center'; cx.fillText(n, bx + 16, by - 19); cx.restore(); }
+    return; }
+  const e = (now() - boxAnim.t0) / 1000;
+  if (boxAnim.phase === 'shake' || boxAnim.phase === 'wait') drawBox(cx, t, bx, by, 1.15, Math.sin(t / 35) * .18 * Math.min(1, e + .3), 0, null);
+  else drawBox(cx, t, bx, by, 1.15 + e * .2, 0, Math.min(40, e * 90), boxAnim.col);
 }
 
 // ---------- drawing: accessories, props, special eyes ----------
@@ -561,11 +629,12 @@ function drawFront(cx, t, R){
   const w = wearing(), ey = -R * .12, gap = R * .27;
   cx.save();
   if (w && String(w).startsWith('evo:')) { const o = (peek && peek.outfit.id === w) ? peek.outfit : (P.evo || []).find(x => x.id === w); if (o) drawEvo(cx, t, R, o, ey); }
-  if (w === 'shades' && !S.asleep) {
-    cx.fillStyle = '#111827';
-    [-1, 1].forEach(s => { cx.beginPath(); cx.roundRect(s * gap - 17, ey - 11, 34, 22, 9); cx.fill(); });
-    cx.fillRect(-6, ey - 6, 12, 4);
-    cx.fillStyle = '#ffffff55'; [-1, 1].forEach(s => { cx.beginPath(); cx.ellipse(s * gap - 6, ey - 4, 6, 3, -.4, 0, 7); cx.fill(); });
+  if (w === 'shades' && !S.asleep) {                                   // sunglasses over the real eye positions
+    const F = window.FACE, L = F ? F.L : { c: [-gap, ey], rx: 15, ry: 17 }, Rr = F ? F.R : { c: [gap, ey], rx: 15, ry: 17 };
+    const lens = (e) => { const g = cx.createLinearGradient(0, e.c[1] - e.ry, 0, e.c[1] + e.ry); g.addColorStop(0, '#2b3344'); g.addColorStop(1, '#07090f');
+      cx.fillStyle = g; cx.beginPath(); cx.roundRect(e.c[0] - e.rx - 3, e.c[1] - e.ry * .62, (e.rx + 3) * 2, e.ry * 1.35, 9); cx.fill(); };
+    lens(L); lens(Rr); cx.fillStyle = '#0d111b'; cx.fillRect(L.c[0] + L.rx, L.c[1] - 5, Rr.c[0] - Rr.rx - L.c[0] - L.rx, 4);
+    cx.fillStyle = '#ffffff55'; [L, Rr].forEach(e => { cx.beginPath(); cx.ellipse(e.c[0] - e.rx * .3, e.c[1] - e.ry * .3, e.rx * .4, 2.6, -.4, 0, 7); cx.fill(); });
   }
   if (w === 'bowtie') {
     cx.translate(0, R * .98); cx.fillStyle = '#ff4d79';
@@ -603,6 +672,7 @@ function drawFront(cx, t, R){
   cx.restore();
 }
 function drawProps(cx, t, x, y, R){
+  drawBoxes(cx, t, x, y, R);
   if (food) {                                                  // snack dropping into the mouth
     const p = Math.min(1, (t - food.t0) / 700); cx.font = '26px "Segoe UI Emoji",system-ui'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
     cx.globalAlpha = 1 - Math.max(0, p - .85) * 6; cx.fillText(food.ch, x, -10 + (y + R * .3 + 10) * (p * p)); cx.globalAlpha = 1;
@@ -663,6 +733,6 @@ let snoreT = null;
 B.on.sleep?.(() => { showNeeds(false); clearInterval(snoreT); let n = 0; snoreT = setInterval(() => { if (!S.asleep || n++ > 5) return clearInterval(snoreT); noise_snore(); }, 6000); });
 function noise_snore(){ if (INFO.sounds === false || INFO.quiet || inCall) return; sfx('purr', .5); }
 
-window.PET = { drawBack, drawFront, drawProps, drawEye, hoverMove, overHand, highFive, dizzy, flung, poked, local, chatted, menuState, onAct,
+window.PET = { earnBox, openBox, isWearing: () => !!wearing() && !S.asleep || (!!wearing() && wearing() !== 'shades'), drawBack, drawFront, drawProps, drawEye, hoverMove, overHand, highFive, dizzy, flung, poked, local, chatted, menuState, onAct,
   muted: () => inCall, lastTouch: () => lastTouch, musicPlaying: () => musicPlaying, sfx, _state: P, _feed: feed, _play: play, _focus: startFocus };
 })();

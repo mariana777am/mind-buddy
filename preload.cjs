@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('buddy', {
   status: st => ipcRenderer.send('status', st),
   dreamsGet: () => ipcRenderer.invoke('dreams-get'),
   ideaAnswer: (id, yes) => ipcRenderer.send('idea-answer', { id, yes }),
+  blindbox: b => ipcRenderer.send('blindbox', b),
   initiativeFeedback: v => ipcRenderer.send('initiative-feedback', v),
   open: url => ipcRenderer.send('open', url),
   answer: (id, yes) => ipcRenderer.send('confirm-answer', { id, yes }),
@@ -30,6 +31,6 @@ contextBridge.exposeInMainWorld('buddy', {
     info: on('info'), say: on('say'), cursor: on('cursor'), sleep: on('sleep'), wake: on('wake'), thinking: on('thinking'),
     working: on('working'), fixed: on('fixed'), alert: on('alert'), confirm: on('confirm'), type: on('type'),
     listenToggle: on('listen-toggle'), help: on('help'), handsfree: on('handsfree'), cmd: on('cmd'), lateAnswer: on('late-answer'), thinkingDone: on('thinking-done'), arcade: on('arcade'), music: on('music'), activity: on('activity'), bump: on('bump'), landed: on('landed'),
-    announce: on('announce'), dreams: on('dreams'), evolution: on('evolution'), evolutionReward: on('evolution-reward'), dreamPreview: on('dream-preview'), walking: on('walking'), walked: on('walked'), peekaboo: on('peekaboo'), scale: on('scale'),
+    announce: on('announce'), dreams: on('dreams'), evolution: on('evolution'), blindboxReady: on('blindbox-ready'), evolutionReward: on('evolution-reward'), dreamPreview: on('dream-preview'), walking: on('walking'), walked: on('walked'), peekaboo: on('peekaboo'), scale: on('scale'),
   },
 });

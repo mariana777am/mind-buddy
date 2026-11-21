@@ -16,7 +16,10 @@ const S = {
   bob: 0, slip: 0, slipT: 0, ring: 0, wobble: 0, antV: 0, antA: 0, fx: [], hand: 0, handT: 0, poke: 0, idleFidget: performance.now() + 40000,
 };
 const now = () => performance.now();
-function act(a, ms = 1100){ if (!a) return; window.PET?.onAct?.(a); S.action = a; S.actionT = now() + ms; if (a === 'wave' || a === 'cheer') S.handT = 1;
+// which hand gesture goes with which action (the 3D hand stickers in renderer/hands)
+const GESTURE = { wave: 'five', hi: 'five', cheer: 'fist', jump: 'fist', nod: 'ok', ok: 'ok', yes: 'ok', agree: 'ok', love: 'shaka', giggle: 'shaka', cool: 'shaka',
+  point: 'point', show: 'point', offer: 'offer', welcome: 'offer', dance: 'spread', shrug: 'spread', ta_da: 'spread' };
+function act(a, ms = 1100){ if (!a) return; window.PET?.onAct?.(a); S.action = a; S.actionT = now() + ms; if (GESTURE[a]) { S.gesture = GESTURE[a]; S.handT = 1; }
   if (a === 'cheer') burst(['🎉', '✨', '⭐'], 14); if (a === 'jump' || a === 'dance') S.antV += 0.5; }
 function burst(chars, n, opts = {}){ for (let i = 0; i < n; i++) S.fx.push({ ch: chars[i % chars.length], x: HX + (Math.random() - .5) * 90, y: HY - 20 + (Math.random() - .5) * 30,
   vx: (Math.random() - .5) * 2.4, vy: -1.5 - Math.random() * 2.5, g: opts.g ?? .07, life: 1, size: opts.size || 15 + Math.random() * 6, rot: (Math.random() - .5) * .6 }); }
@@ -54,15 +57,14 @@ function draw(){
   cx.fillStyle = '#0005'; cx.beginPath(); cx.ellipse(HX, 222, 52 - (HY - y) * .4, 7, 0, 0, 7); cx.fill();
   cx.save(); cx.translate(x, y); cx.rotate(rot); cx.scale(sx, sy);
   window.PET?.drawBack(cx, t, R);
-  drawAntenna(t);
-  drawHead();
-  drawFace(t);
-  drawHeadset(t);
-  window.PET?.drawFront(cx, t, R);
+  if (ART.ready()) { drawArt(t); drawRealFace(t); }       // the 3D-rendered buddy, with live eyes and mouth
+  else { drawAntenna(t); drawHead(); drawFace(t); drawHeadset(t); }   // simple drawing until the artwork loads
+  drawLit(lx => window.PET?.drawFront(lx, t, R));          // outfits get light, shading and a soft shadow
   cx.restore();
   window.PET?.drawProps(cx, t, x, y, R);
   window.SCENES?.drawOnBuddy(cx, t, x, y, R);
   if (S.hand > .02) drawHand(x, y, t);
+  if (S.walking) drawWalkHand(x, y, t);
   drawFX(t);
   if (S.asleep && Math.random() < .012) floaty(Math.random() < .5 ? 'z' : 'Z', HX + 52, HY - 48);
   // idle fidgets so it feels alive
@@ -73,6 +75,136 @@ function draw(){
     if (f === 'wobble') S.antV += .6;
     if (f === 'adjust') { S.slipT = .25; setTimeout(() => S.slipT = 0, 700); } }
   requestAnimationFrame(draw);
+}
+// ---------- the realistic buddy: a 3D render (eyes and mouth painted out) + live face ----------
+// Geometry measured on the 800 px render: head centre (372, 398), radius 248 → scaled so the head radius is R.
+const ART = { img: new Image(), hs: new Image(), mic: new Image(), n: 0, ready(){ return this.n >= 3; } };
+[['img', 'buddy-base.png'], ['hs', 'buddy-mask-headset.png'], ['mic', 'buddy-mask-mic.png']].forEach(([k, f]) => { ART[k].onload = () => { ART.n++; tintKey = ''; }; ART[k].src = f; });
+const AK = R / 248, P8 = (x, y) => [(x - 372) * AK, (y - 398) * AK];   // 800-px render coords → head coords
+const FACE = window.FACE = {
+  L: { c: P8(225, 401), rx: 52 * AK, ry: 67 * AK, pupil: [1 * AK, 9 * AK], pr: 36 * AK },
+  R: { c: P8(379, 392), rx: 65 * AK, ry: 67 * AK, pupil: [-1 * AK, 12 * AK], pr: 41 * AK },
+  mouth: P8(295, 511), mic: P8(290, 628), tips: [P8(640, 178), P8(748, 257), P8(728, 398)],
+};
+let tinted = null, tintKey = '';
+const CLASSIC_BAND = '#3a3f4f', CLASSIC_FOAM = '#2a2e3b';
+function artCanvas(){
+  const key = C.band + C.cup; if (tinted && tintKey === key) return tinted;
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
+  g.drawImage(ART.img, 0, 0, N, N);
+  const recolour = (mask, col, lift) => { const l = document.createElement('canvas'); l.width = l.height = N; const q = l.getContext('2d');
+    q.drawImage(ART.img, 0, 0, N, N); q.globalCompositeOperation = 'destination-in'; q.drawImage(mask, 0, 0, N, N);
+    q.globalCompositeOperation = 'color'; q.fillStyle = col; q.fillRect(0, 0, N, N);
+    q.globalCompositeOperation = 'screen'; q.globalAlpha = lift; q.fillStyle = col; q.fillRect(0, 0, N, N);
+    q.globalCompositeOperation = 'destination-in'; q.globalAlpha = 1; q.drawImage(mask, 0, 0, N, N); g.drawImage(l, 0, 0); };
+  if (C.band !== CLASSIC_BAND) recolour(ART.hs, C.band, .38);
+  if (C.cup !== CLASSIC_FOAM) recolour(ART.mic, C.band, .15);
+  tinted = c; tintKey = key; return c;
+}
+function drawArt(t){
+  const s = 248 / 160 * AK * (800 / 512) * (160 / 248);       // 512-px image → head coords
+  const k = 800 / 512 * AK, img = artCanvas();
+  cx.drawImage(img, -372 * AK, -398 * AK, 512 * k, 512 * k);
+  // antenna tips light up while thinking or listening; the mic glows while it hears you
+  const glow = S.thinking ? .5 + .5 * Math.sin(t / 130) : S.listening ? Math.min(1, .3 + S.level * 1.5) : 0;
+  cx.save(); cx.globalCompositeOperation = 'lighter';
+  if (glow) FACE.tips.forEach(([x, y], i) => { const a = S.thinking ? .5 + .5 * Math.sin(t / 130 + i * 1.3) : glow;
+    const gg = cx.createRadialGradient(x, y, 0, x, y, 14); gg.addColorStop(0, `rgba(170,240,255,${.75 * a})`); gg.addColorStop(1, 'rgba(90,200,255,0)'); cx.fillStyle = gg; cx.beginPath(); cx.arc(x, y, 14, 0, 7); cx.fill(); });
+  if (S.listening) { const [x, y] = FACE.mic, a = .35 + S.level * 1.2; const gg = cx.createRadialGradient(x, y, 0, x, y, 22); gg.addColorStop(0, `rgba(255,190,110,${Math.min(.8, a)})`); gg.addColorStop(1, 'rgba(255,140,60,0)'); cx.fillStyle = gg; cx.beginPath(); cx.arc(x, y, 22, 0, 7); cx.fill(); }
+  cx.restore();
+}
+function realEye(e, ex, ey, big, t){
+  const [x, y] = e.c, rx = e.rx * big, ry = e.ry * big;
+  cx.save();                                                      // a soft inset shadow where the eye meets the head
+  cx.fillStyle = 'rgba(6,30,110,.38)'; cx.filter = 'blur(1.6px)'; cx.beginPath(); cx.ellipse(x + .8, y + 1.6, rx + 1.4, ry + 1.6, 0, 0, 7); cx.fill(); cx.filter = 'none';
+  const w = cx.createRadialGradient(x - rx * .35, y - ry * .45, ry * .1, x, y, ry * 1.05);  // glossy white
+  w.addColorStop(0, '#ffffff'); w.addColorStop(.55, '#f3f6fb'); w.addColorStop(.85, '#d9e1ef'); w.addColorStop(1, '#b8c5dc');
+  cx.fillStyle = w; cx.beginPath(); cx.ellipse(x, y, rx, ry, 0, 0, 7); cx.fill();
+  cx.save(); cx.clip();
+  const px = x + e.pupil[0] * big + ex, py = y + e.pupil[1] * big + ey, pr = e.pr * (S.mood === 'excited' ? 1.05 : 1) * big;
+  cx.fillStyle = 'rgba(20,30,60,.25)'; cx.beginPath(); cx.arc(px + .6, py + 1.2, pr + .8, 0, 7); cx.fill();
+  const pg = cx.createRadialGradient(px - pr * .35, py - pr * .4, pr * .05, px, py, pr);  // glossy black pupil
+  pg.addColorStop(0, '#5a5f70'); pg.addColorStop(.35, '#1a1c25'); pg.addColorStop(1, '#030306');
+  cx.fillStyle = pg; cx.beginPath(); cx.arc(px, py, pr, 0, 7); cx.fill();
+  cx.fillStyle = 'rgba(255,255,255,.95)'; cx.beginPath(); cx.ellipse(px + pr * .32, py - pr * .42, pr * .26, pr * .18, -.5, 0, 7); cx.fill();
+  cx.fillStyle = 'rgba(255,255,255,.5)'; cx.beginPath(); cx.arc(px - pr * .38, py + pr * .38, pr * .09, 0, 7); cx.fill();
+  if (S.mood === 'excited') { cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(px - pr * .3, py - pr * .1, pr * .12, 0, 7); cx.fill(); }
+  const sh = cx.createLinearGradient(x, y - ry, x, y - ry * .2); sh.addColorStop(0, 'rgba(10,40,120,.22)'); sh.addColorStop(1, 'rgba(10,40,120,0)');   // upper-lid shade
+  cx.fillStyle = sh; cx.fillRect(x - rx, y - ry, rx * 2, ry);
+  cx.restore(); cx.restore();
+}
+function shutEye(e, happy){
+  const [x, y] = e.c, w = e.rx * .9;
+  cx.save(); cx.strokeStyle = '#0a1d5c'; cx.lineWidth = 3.4; cx.lineCap = 'round'; cx.shadowColor = 'rgba(255,255,255,.35)'; cx.shadowOffsetY = 1;
+  cx.beginPath(); if (happy) { cx.moveTo(x - w, y + 4); cx.quadraticCurveTo(x, y - 10, x + w, y + 4); } else { cx.moveTo(x - w, y + 1); cx.quadraticCurveTo(x, y + 8, x + w, y + 1); }
+  cx.stroke(); cx.restore();
+}
+function glossyBlob(x, y, rx, ry, fill){                            // the mouth: dark, glossy, slightly inset
+  cx.save(); cx.fillStyle = 'rgba(255,255,255,.25)'; cx.beginPath(); cx.ellipse(x, y + 1.2, rx + .8, ry + .8, 0, 0, 7); cx.fill();
+  const g = cx.createRadialGradient(x - rx * .3, y - ry * .4, 0, x, y, Math.max(rx, ry)); g.addColorStop(0, fill ? '#3a1622' : '#2b2f3d'); g.addColorStop(1, '#050409');
+  cx.fillStyle = g; cx.beginPath(); cx.ellipse(x, y, rx, ry, 0, 0, 7); cx.fill();
+  cx.fillStyle = 'rgba(255,255,255,.55)'; cx.beginPath(); cx.ellipse(x - rx * .3, y - ry * .45, rx * .28, ry * .16, -.3, 0, 7); cx.fill(); cx.restore();
+}
+function drawRealFace(t){
+  if (t > S.nextBlink) { S.blinkAt = t; S.nextBlink = t + 2200 + Math.random() * 3500; }
+  const blink = t - S.blinkAt < 130, m = S.mood, a = t < S.actionT ? S.action : null;
+  const ex = Math.max(-1, Math.min(1, S.look.x)) * 4.5, ey = Math.max(-1, Math.min(1, S.look.y)) * 4 + (S.thinking ? -4 : 0);
+  const special = S.dizzy > t ? 'swirl' : S.eyeStyle && S.eyeUntil > t ? S.eyeStyle : null;
+  [['L', -1], ['R', 1]].forEach(([k, side]) => {
+    const e = FACE[k], big = m === 'excited' ? 1.08 : m === 'curious' && side === 1 ? 1.07 : 1;
+    if (special && !S.asleep) { realEye(e, 0, 0, 1, t); return window.PET?.drawEye(cx, special, e.c[0], e.c[1], t); }
+    const shut = S.asleep || blink || (a === 'wink' && side === 1);
+    if (shut) return shutEye(e, false);
+    if (m === 'happy' && (a === 'wave' || a === 'cheer') || m === 'proud' && side === 1) return shutEye(e, true);
+    realEye(e, ex, ey, big, t);
+  });
+  if (m === 'worried' || m === 'focused' || m === 'confused') {
+    cx.save(); cx.strokeStyle = '#0a1d5c'; cx.lineWidth = 3.4; cx.lineCap = 'round';
+    [['L', -1], ['R', 1]].forEach(([k, s2]) => { const [x, y] = FACE[k].c, top = y - FACE[k].ry - 5, tilt = m === 'worried' ? -s2 * 3.5 : m === 'focused' ? s2 * 3.5 : (s2 === 1 ? -4 : 2);
+      cx.beginPath(); cx.moveTo(x - 9, top + tilt); cx.lineTo(x + 9, top - tilt); cx.stroke(); }); cx.restore();
+  }
+  if (m === 'happy' || m === 'proud' || m === 'excited') { cx.save(); cx.filter = 'blur(2.5px)'; cx.fillStyle = 'rgba(255,120,170,.45)';
+    [[FACE.L.c[0] - 6, 20], [FACE.R.c[0] + 10, 18]].forEach(([x, y]) => { cx.beginPath(); cx.ellipse(x, y, 8, 4.5, 0, 0, 7); cx.fill(); }); cx.restore(); }
+  const [mx, my] = FACE.mouth, open = S.talking ? .25 + S.mouth * .9 : 0;
+  if (S.asleep) { const z = 2.6 + Math.sin(t / 650) * 1.2; glossyBlob(mx, my, z, z * .85); }
+  else if (S.talking) { glossyBlob(mx, my, 5.5 + open * 3, 2.5 + open * 7.5, true);
+    if (open > .45) { cx.save(); cx.fillStyle = '#ff6b8b'; cx.beginPath(); cx.ellipse(mx, my + open * 4.5, 3.8, 2.4, 0, 0, 7); cx.fill(); cx.restore(); } }
+  else if (m === 'happy' || m === 'excited' || m === 'proud' || a === 'wave' || a === 'cheer') {
+    cx.save(); const g = cx.createLinearGradient(mx, my - 4, mx, my + 8); g.addColorStop(0, '#2a1220'); g.addColorStop(1, '#050409');
+    cx.fillStyle = 'rgba(255,255,255,.25)'; cx.beginPath(); cx.moveTo(mx - 9, my - 2); cx.quadraticCurveTo(mx, my + 11, mx + 9, my - 2); cx.closePath(); cx.fill();
+    cx.fillStyle = g; cx.beginPath(); cx.moveTo(mx - 9, my - 3); cx.quadraticCurveTo(mx, my + 10, mx + 9, my - 3); cx.quadraticCurveTo(mx, my + 1, mx - 9, my - 3); cx.fill();
+    cx.fillStyle = '#ff6b8b'; cx.beginPath(); cx.ellipse(mx, my + 4.5, 3, 1.6, 0, 0, 7); cx.fill(); cx.restore(); }
+  else if (m === 'worried' || m === 'confused') { cx.save(); cx.strokeStyle = '#0a0612'; cx.lineWidth = 3; cx.lineCap = 'round';
+    cx.beginPath(); cx.moveTo(mx - 7, my + 2); cx.quadraticCurveTo(mx - 3, my - 3, mx, my + 1); cx.quadraticCurveTo(mx + 4, my + 4, mx + 7, my - 1); cx.stroke(); cx.restore(); }
+  else glossyBlob(mx, my, 4.6, 5.7);                                // the signature little "o"
+  if (m === 'confused' && !S.talking) { cx.font = 'bold 22px system-ui'; cx.fillStyle = '#ffd84d'; cx.fillText('?', R * .7, -R * .75); }
+}
+const EDGE = document.createElement('canvas'), EX = EDGE.getContext('2d');
+function bevel(){
+  if (!window.PET?.isWearing?.()) return;
+  if (EDGE.width !== LAY.width || EDGE.height !== LAY.height) { EDGE.width = LAY.width; EDGE.height = LAY.height; }
+  const d = Math.max(1, window.devicePixelRatio || 1), W = LAY.width, H = LAY.height;
+  const pass = (col, dx, dy, blur) => {
+    EX.setTransform(1, 0, 0, 1, 0, 0); EX.globalCompositeOperation = 'source-over'; EX.clearRect(0, 0, W, H);
+    EX.fillStyle = col; EX.fillRect(0, 0, W, H);
+    EX.globalCompositeOperation = 'destination-out'; EX.filter = `blur(${blur * d}px)`; EX.drawImage(LAY, dx * d, dy * d); EX.filter = 'none';
+    LX.save(); LX.setTransform(1, 0, 0, 1, 0, 0); LX.globalCompositeOperation = 'source-atop'; LX.drawImage(EDGE, 0, 0); LX.restore(); };
+  pass('rgba(0,12,45,.55)', -2.2, -2.6, 2.4);                       // shade where the light can't reach
+  pass('rgba(255,255,255,.55)', 1.6, 2, 1.6);                       // a glossy rim on the lit side
+}
+// outfits drawn on a layer, then lit like the 3D render: light from the top left, shade bottom right, a soft contact shadow
+const LAY = document.createElement('canvas'), LX = LAY.getContext('2d');
+function drawLit(fn){
+  if (LAY.width !== cv.width || LAY.height !== cv.height) { LAY.width = cv.width; LAY.height = cv.height; }
+  LX.setTransform(1, 0, 0, 1, 0, 0); LX.clearRect(0, 0, LAY.width, LAY.height);
+  const T = cx.getTransform(); LX.setTransform(T); fn(LX);
+  LX.globalCompositeOperation = 'source-atop';
+  const g = LX.createRadialGradient(-R * .55, -R * 1.25, R * .05, -R * .1, -R * .3, R * 2);
+  g.addColorStop(0, 'rgba(255,255,255,.55)'); g.addColorStop(.3, 'rgba(255,255,255,.12)'); g.addColorStop(.6, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,10,40,.4)');
+  LX.fillStyle = g; LX.fillRect(-R * 3, -R * 3, R * 6, R * 6); LX.globalCompositeOperation = 'source-over';
+  bevel();                                                        // rounded edges: light on the top left, shade on the bottom right
+  cx.save(); cx.setTransform(1, 0, 0, 1, 0, 0); const d = Math.max(1, window.devicePixelRatio || 1);
+  cx.shadowColor = 'rgba(0,15,60,.45)'; cx.shadowBlur = 5 * d; cx.shadowOffsetX = 1.5 * d; cx.shadowOffsetY = 3 * d; cx.drawImage(LAY, 0, 0); cx.restore();
 }
 function drawAntenna(t){
   const sway = S.antA * .5 + Math.sin(t / 900) * .04, droop = S.asleep ? .35 : 0;
@@ -161,7 +293,31 @@ function drawHeadset(t){
   cx.fillStyle = fg; cx.beginPath(); cx.ellipse(-R * .36, R * .62, 11 + lv * 2, 7.5 + lv * 2, -.15, 0, 7); cx.fill(); cx.shadowBlur = 0;
   cx.restore();
 }
+const HANDS = {}; ['five', 'fist', 'ok', 'shaka', 'point', 'offer', 'spread', 'walk'].forEach(n => { const i = new Image(); i.src = `hands/${n}.png`; HANDS[n] = i; });
+window.HANDPOS = { x: HX + R + 16, y: HY + 4 };
 function drawHand(x, y, t){
+  const g = S.gesture || 'five', img = HANDS[g];
+  if (!img?.complete || !img.naturalWidth) return drawHandSimple(x, y, t);
+  const k = Math.min(1, S.hand * 1.3), h = 56 * (g === 'offer' || g === 'walk' || g === 'point' || g === 'fist' ? .82 : 1), w = h * img.naturalWidth / img.naturalHeight;
+  let hx = x + R + 24, hy = y + 4 - k * 14, rot = 0;
+  if (g === 'five') rot = Math.sin(t / 110) * .45;                                 // waving
+  if (g === 'fist') hy -= Math.abs(Math.sin(t / 120)) * 9;                         // fist pump
+  if (g === 'ok' || g === 'shaka') rot = Math.sin(t / 260) * .12;
+  if (g === 'point') { rot = -.5 + Math.sin(t / 200) * .05; hx += 2; hy -= 10; }   // points up at the bubble
+  if (g === 'spread') { rot = Math.sin(t / 90) * .25; }                            // jazz hands
+  if (g === 'offer') { hx += 4; rot = Math.sin(t / 300) * .06; }
+  window.HANDPOS = { x: hx, y: hy };
+  cx.save(); cx.globalAlpha = k; cx.translate(hx, hy); cx.rotate(rot); cx.scale(.6 + .4 * k, .6 + .4 * k);
+  cx.shadowColor = 'rgba(0,15,60,.35)'; cx.shadowBlur = 6; cx.shadowOffsetY = 3;
+  cx.drawImage(img, -w / 2, -h / 2, w, h); cx.restore();
+}
+function drawWalkHand(x, y, t){                                                  // little finger-walk under it while it strolls
+  const img = HANDS.walk; if (!img?.complete || !img.naturalWidth) return;
+  const h = 30, w = h * img.naturalWidth / img.naturalHeight;
+  cx.save(); cx.translate(x + 6, y + R + 4); cx.rotate(Math.sin(t / 95) * .18); cx.scale(S.walking < 0 ? -1 : 1, 1);
+  cx.shadowColor = 'rgba(0,15,60,.35)'; cx.shadowBlur = 5; cx.shadowOffsetY = 2; cx.drawImage(img, -w / 2, -h / 2, w, h); cx.restore();
+}
+function drawHandSimple(x, y, t){
   cx.save(); cx.globalAlpha = Math.min(1, S.hand * 1.4);
   const hx = x + R + 14, hy = y - 8 - S.hand * 18 + Math.sin(t / 90) * 2, r = Math.sin(t / 110) * .5;
   cx.translate(hx, hy); cx.rotate(r);
@@ -240,7 +396,7 @@ function say({ text, mood, action, silent, interim, welcome, answer, choices, pr
   if (!text) return;
   if (!interim) S.busyUntil = Math.max(S.busyUntil || 0, now() + Math.max(4000, text.length * 65) + (silent ? 0 : 3000));
   S.thinking = interim ? true : pending > 0;
-  if (mood) S.mood = mood; if (action) act(action);
+  if (mood) S.mood = mood; if (action) act(action); else if (showList?.length) act('point');   // points at what it shows you
   let extra = '';
   if (welcome?.recent) extra = `<div><span class="more" onclick="this.nextElementSibling.hidden=!this.nextElementSibling.hidden">📋 where you left off</span><pre class="recent" hidden>${esc(welcome.recent)}</pre></div>`;
   if (interim) { const h = esc(text) + ' <span class="dots"><span>.</span><span>.</span><span>.</span></span>'; if (pending > 0) thinkingHTML = h; show(h, { stick: true, force: true }); speak(text, mood, { silent: true }); return; }   // "let me check…" while the Mind works: shown, not spoken
