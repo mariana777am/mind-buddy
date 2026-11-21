@@ -11,6 +11,11 @@ import { createTimeline, createReminders } from './lib/store.js';
 import { createInitiative, LEVELS } from './lib/initiative.js';
 import { createMusic } from './lib/music.js';
 import { relayStream } from './lib/streamproxy.js';
+import { createHabits } from './lib/habits.js';
+import { parseDream, dreamPrompt, dreamFormatPart } from './lib/dreamspec.js';
+import { createEvolution, evolutionPrompt, parseEvolution, ideasMarkdown, GAMES as EVO_GAMES } from './lib/evolution.js';
+await import('./renderer/arcade-design.js');                      // the arcade's twists, so weekly quests only use real ones
+const TWISTS = globalThis.ArcadeDesign.TWISTS;
 import http from 'node:http';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -55,6 +60,8 @@ const readJson = (n, d) => { try { return JSON.parse(readFileSync(jsonPath(n), '
 const writeJson = (n, v) => { try { writeFileSync(jsonPath(n), JSON.stringify(v)); } catch (_) {} };
 const settings = readJson('settings', { scale: 1, sounds: true });
 const profile = readJson('profile', { facts: [] });
+const habits = createHabits({ read: () => readJson('habits', null), write: v => writeJson('habits', v) });
+const evo = createEvolution({ read: () => readJson('evolution', null), write: v => writeJson('evolution', v) });
 let petNote = '';
 // what you told me you love: your Mind can bring it up, and the dreams are about it
 if (!settings.likesSeeded) { const f = 'Loves travelling, adventures, walking her white Maltese, sitting in cafés and hiking mountains';
@@ -160,7 +167,7 @@ app.whenReady().then(async () => {
   createWindow();
   registerHotkeys();
   timers.push(setInterval(() => alive() && tick().catch(e => log('tick failed:', e.message)), 5000));
-  if (!settings.announce?.picked && !settings.announceAsked) { settings.announceAsked = true; writeJson('settings', settings);   // first time: let her choose the announcement voice
+  if (false) { settings.announceAsked = true; writeJson('settings', settings);   // first time: let her choose the announcement voice
     setTimeout(() => { if (!alive()) return; toUI('say', { text: 'New trick! I now make free announcements with a Windows voice. Pick the one you like!', mood: 'excited', action: 'jump', silent: true }); openVoicePicker(); }, 12000); }
   timers.push(setInterval(() => alive() && meetingCheck(), 60_000)); setTimeout(() => alive() && meetingCheck(), 8000);
   timers.push(setInterval(() => alive() && eyes(), 90));
@@ -197,13 +204,13 @@ ipcMain.handle('facts', () => profile.facts.slice(-40));
 ipcMain.handle('ask', async (e, text) => {
   text = String(text || '').trim().slice(0, 2000); if (!text) return null;
   uiStatus.touched = Date.now(); if (!/^\[game helper/.test(text)) initiative.feedback('yes');
-  log('you:', text.slice(0, 100));
+  log('you:', text.slice(0, 100)); const t0 = Date.now(); log('🧠 Mind is thinking… (not listening, no voice until the reply is here)');
   try {
     const r = await brain.talk(text, { onThinking: (t, mood) => toUI('say', { text: t, mood, interim: true }) });
     if (r.music) musicCommand(r.music);
-    log('buddy:', r.text.slice(0, 100), r.done.length ? JSON.stringify(r.done) : '');
+    log(`buddy (${((Date.now() - t0) / 1000).toFixed(1)} s):`, r.text.slice(0, 100), r.done.length ? JSON.stringify(r.done) : '');
     return r;
-  } catch (err){ log('ask failed:', err.message); return { text: friendlyError(err), mood: 'confused', action: 'shrug', done: [] }; }
+  } catch (err){ log('ask failed:', err.message); return { text: friendlyError(err), mood: 'confused', action: 'shrug', done: [], error: true }; }
 });
 function friendlyError(e){
   const m = e.message || String(e);
@@ -229,6 +236,7 @@ async function ipcTts(text, mood){
   if (!VOICE() || quiet) return null;
   try {
     if (VOICE() === 'elevenlabs'){
+      log(`🔊 ElevenLabs speaking the reply (${String(text || '').length} characters)`);
       const m = ELEVEN_MOOD[mood] || { stability: .35, style: .6 };   // lively by default
       const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(ELEVEN_VOICE())}?output_format=mp3_44100_128`, {
         method: 'POST', headers: { 'xi-api-key': E.ELEVENLABS_API_KEY, 'content-type': 'application/json', accept: 'audio/mpeg' },
@@ -349,8 +357,15 @@ ipcMain.on('menu', (e, pet = {}) => {
     { label: '💬 Chattiness', submenu: [...Object.entries(CHATTY).map(([k, l]) => ({ label: l, type: 'radio', checked: (settings.chattiness || 'normal') === k, click: () => setChattiness(k) })),
       { type: 'separator' }, { label: '✨ Say something now!', click: () => initiative.tick({ idle: 30, win: current, force: ['fun', 'followup', 'stuck'][Math.floor(Math.random() * (profile.facts.length ? 2 : 1))] }) }] },
     { label: '💤 Doze when there\'s nothing to do', type: 'checkbox', checked: settings.doze !== false, click: () => { settings.doze = settings.doze === false; writeJson('settings', settings); } },
-    { label: '💭 Dreams while sleeping', type: 'checkbox', checked: settings.dreams !== false, click: () => { settings.dreams = settings.dreams === false; writeJson('settings', settings); toUI('info', info()); } },
-    { label: '📢 Announcement voice…', click: () => openVoicePicker() },
+    { label: '💭 Dreams', submenu: [{ label: '💭 Dreams while sleeping', type: 'checkbox', checked: settings.dreams !== false, click: () => { settings.dreams = settings.dreams === false; writeJson('settings', settings); toUI('info', info()); } },
+      { label: '✨ Dream something new now (1 Mind message)', enabled: settings.dreams !== false, click: () => dreamNow() },
+      { label: '👀 Replay my latest dream', enabled: habits.dreams().length > 0, click: () => toUI('dream-preview', habits.dreams().slice(-1)[0]) },
+      { label: `${habits.dreams().length} dreams designed by your Mind so far`, enabled: false }] },
+    { label: '🌱 Evolution', submenu: [
+      { label: '✨ Evolve now (1 Mind message)', click: () => runEvolution(true) },
+      { label: evo.quest() ? `⭐ This week: ${evo.quest().name} (${EVO_GAMES[evo.quest().game]})` : 'No quest right now', enabled: !!evo.quest(), click: () => evo.quest() && openArcade(evo.quest().game) },
+      { label: `💡 Upgrade ideas (${evo.data.ideas.filter(i => i.status === 'approved').length} approved) — open IDEAS.md`, click: () => { writeIdeas(); shell.openPath(path.join(DIR, 'IDEAS.md')); } },
+      { label: `${evo.data.history.length} evolutions so far`, enabled: false }] },
     { label: '🔊 Sound effects', type: 'checkbox', checked: settings.sounds !== false, click: () => { settings.sounds = settings.sounds === false; writeJson('settings', settings); toUI('info', info()); } },
     { type: 'separator' },
     { label: google.connected() ? '✅ Google connected — disconnect' : '🔗 Connect Google Calendar + Drive', click: () => google.connected() ? (google.disconnect(), toUI('info', info())) : connectGoogle() },
@@ -400,6 +415,7 @@ const pageServer = http.createServer((req, res) => {
 }).listen(0, '127.0.0.1', () => { pagePort = pageServer.address().port; });
 let musicWin = null, musicQueue = [];
 function openMusic(cmd){
+  if (cmd?.arg && (cmd.op === 'yt' || cmd.op === 'radio')) habits.music({ kind: cmd.op, query: cmd.arg });
   if (musicWin && !musicWin.isDestroyed()) { musicWin.showInactive(); if (cmd) musicWin.webContents.send('music-cmd', cmd); return; }
   if (!pagePort) { setTimeout(() => openMusic(cmd), 200); return; }
   const b = win.getBounds(), d = screen.getDisplayMatching(b).workArea, w = 640, h = 420;
@@ -421,7 +437,7 @@ function musicCommand(raw){                                   // "[music:play|Tu
 ipcMain.handle('music-youtube', async (e, q) => { try { return { items: await music.youtube(q) }; } catch (err) { log('youtube:', err.message); return { error: err.message }; } });
 ipcMain.handle('music-lyrics', async (e, m) => { try { return await music.lyrics(m); } catch (err) { log('lyrics:', err.message); return null; } });
 ipcMain.handle('music-radio', async (e, q) => { try { const items = await music.radio(q); items.forEach(s => allowedStreams.add(s.url)); return { items }; } catch (err) { log('radio:', err.message); return { error: err.message }; } });
-ipcMain.on('music-state', (e, st) => { uiStatus.music = !!st.playing; toUI('music', st); if (st.playing) log('♪', st.kind, st.title || ''); });
+ipcMain.on('music-state', (e, st) => { uiStatus.music = !!st.playing; toUI('music', st); if (st.playing) { log('♪', st.kind, st.title || ''); if (st.title) habits.music({ kind: st.kind, title: [st.title, st.artist].filter(Boolean).join(' – ') }); } });
 ipcMain.on('music-close', () => musicWin?.close());
 ipcMain.on('music-log', (e, m) => log('music:', String(m).slice(0, 300)));
 ipcMain.on('music', (e, cmd) => cmd?.op === 'raw' ? musicCommand(cmd.arg) : cmd?.op && ['yt', 'radio'].includes(cmd.op) ? openMusic(cmd) : musicCommand(cmd?.op));
@@ -459,7 +475,7 @@ function openArcade(name){
 }
 ipcMain.on('arcade-close', () => arcade?.close());
 ipcMain.on('arcade-event', (e, ev) => toUI('arcade', ev));
-ipcMain.on('arcade-result', (e, r) => { log('arcade:', r.game, r.won ? 'you won' : r.tie ? 'tie' : 'buddy won', r.score); toUI('arcade', { type: 'result', ...r }); });
+ipcMain.on('arcade-result', (e, r) => { habits.game(r.game); if (r.weekly && r.won) { const q = evo.completeQuest(); if (q) { log('⭐ weekly quest done:', q.name); setTimeout(() => toUI('evolution-reward', q), 2500); } } log('arcade:', r.game, r.won ? 'you won' : r.tie ? 'tie' : 'buddy won', r.score); toUI('arcade', { type: 'result', ...r }); });
 ipcMain.on('open-arcade', (e, name) => openArcade(name));
 
 // ---------- initiative: it starts conversations at natural pauses ----------
@@ -487,7 +503,53 @@ function setChattiness(v){ settings.chattiness = v; writeJson('settings', settin
 // ---------- sleep / wake / welcome back ----------
 let sleeping = false, sleptAt = 0, focusSince = Date.now(), lastStretch = Date.now();
 let manualNap = false, dozing = false;   // dozing = it nodded off because nothing was happening, while you're still working   // "Nap now": stays asleep until you poke it, talk to it or an alert comes (the click itself must not wake it)
-function goSleep(at, manual = false, doze = false){ if (sleeping) return; sleeping = true; manualNap = manual || doze; dozing = doze; sleptAt = at; toUI('sleep', { doze }); log(doze ? 'dozing (nothing to do)' : manual ? 'napping (you asked)' : 'napping'); }
+// ---------- dreams your Mind designs from what you've been into lately ----------
+const DREAMS_PER_DAY = Number(E.DREAMS_PER_DAY ?? 3), DREAM_GAP_H = Number(E.DREAM_EVERY_HOURS ?? 3);
+let dreamBusy = false;
+async function newDream(force = false){
+  if (dreamBusy || settings.dreams === false || provider() === 'mock') return null;
+  if (!force && (quiet || habits.dreamsToday() >= DREAMS_PER_DAY || Date.now() - habits.lastDreamAt() < DREAM_GAP_H * 3600_000)) return null;
+  dreamBusy = true;
+  try {
+    const dogName = E.DOG_NAME || settings.dogName || '';
+    const r = await ask('dreams', dreamPrompt({ lately: habits.summary({ facts: profile.facts, dogName }), past: habits.dreams().map(d => d.title), dogName }));
+    const d = parseDream(r);
+    if (!d) { log('dream: no recipe in the reply:', String(r || '').slice(0, 120)); return null; }
+    habits.addDream(d); log('💭 new dream:', d.title, '|', d.place, d.props.join(','), '|', d.why); toUI('dreams', habits.dreams()); return d;
+  } catch (e){ log('dream failed:', e.message); return null; } finally { dreamBusy = false; }
+}
+ipcMain.handle('dreams-get', () => habits.dreams());
+
+// ---------- weekly evolution: your Mind grows the buddy from your week ----------
+let evoBusy = false;
+const writeIdeas = () => { try { writeFileSync(path.join(DIR, 'IDEAS.md'), ideasMarkdown(evo.data.ideas)); } catch (e){ log('IDEAS.md:', e.message); } };
+async function runEvolution(force = false){
+  if (evoBusy || provider() === 'mock') return;
+  if (!force && (quiet || !evo.due())) return;
+  evoBusy = true;
+  if (force) toUI('say', { text: '🌱 Evolution time! Let me look back at your week…', mood: 'excited', action: 'think', silent: true });
+  try {
+    const dogName = E.DOG_NAME || settings.dogName || '';
+    const r = await ask('evolution', evolutionPrompt({ lately: habits.summary({ facts: profile.facts, dogName }), petLevel: Number((petNote.match(/level (\d+)/) || [])[1]) || 1,
+      outfits: evo.data.history.map(h => h.outfit), dreams: habits.dreams().map(d => d.title), history: evo.historyText(), ideas: evo.ideasText(), twists: TWISTS, dreamFormat: dreamFormatPart() }));
+    const ev = parseEvolution(r, { twists: TWISTS });
+    if (!ev) { log('evolution: no plan in the reply:', String(r || '').slice(0, 160)); if (force) toUI('say', { text: 'Hmm, my evolution brain is foggy. Try again in a bit?', mood: 'confused', silent: true }); return; }
+    const d = parseDream(r); if (d) { habits.addDream(d); toUI('dreams', habits.dreams()); ev.dream = d.title; }
+    const id = evo.add(ev); writeIdeas();
+    log('🌱 evolution:', ev.title, '| outfit', ev.outfit.name, ev.outfit.kind, ev.outfit.color, '| quest', ev.quest.name, ev.quest.game, ev.quest.twist, '| dream', ev.dream || '-', '| idea', ev.idea?.text || '-');
+    if (sleeping) { sleeping = false; manualNap = false; dozing = false; uiStatus.touched = Date.now(); toUI('wake'); }
+    toUI('evolution', { ...ev, id, gameLabel: EVO_GAMES[ev.quest.game] });
+  } catch (e){ log('evolution failed:', e.message); } finally { evoBusy = false; }
+}
+ipcMain.on('idea-answer', (e, { id, yes }) => { const i = evo.answerIdea(id, yes); if (!i) return; writeIdeas(); log('💡 idea', yes ? 'approved:' : 'skipped:', i.text); });
+ipcMain.handle('arcade-weekly', () => { const q = evo.quest(); return q ? { game: q.game, twist: q.twist, name: q.name } : null; });
+async function dreamNow(){
+  toUI('say', { text: 'Ooh, let me dream something up from your week… 💭', mood: 'sleepy', action: 'think', silent: true });
+  const d = await newDream(true);
+  toUI('dream-preview', d || habits.dreams().slice(-1)[0] || null);
+  if (!d) toUI('say', { text: 'My dream machine is a bit foggy. Here\'s one I had before!', mood: 'confused', silent: true });
+}
+function goSleep(at, manual = false, doze = false){ if (sleeping) return; sleeping = true; manualNap = manual || doze; dozing = doze; sleptAt = at; toUI('sleep', { doze }); setTimeout(() => sleeping && newDream(), 4000); log(doze ? 'dozing (nothing to do)' : manual ? 'napping (you asked)' : 'napping'); }
 async function wakeUp(welcome = true){
   if (!sleeping) return; sleeping = false; manualNap = false; dozing = false; uiStatus.touched = Date.now();
   const away = (Date.now() - sleptAt) / 60000; focusSince = Date.now(); lastStretch = Date.now();
@@ -499,7 +561,8 @@ async function wakeUp(welcome = true){
   const due = reminders.soon(2 * 3600_000).map(r => `- ${fmtTime(new Date(r.at))}: ${r.text}`).join('\n');
   toUI('thinking');
   let r = null;
-  try { r = await brain.welcomeBack({ awayMinutes: away, recent, upcoming, dueReminders: due }); } catch (e){ log('welcome failed:', e.message); }
+  const dreamt = habits.dreams().filter(d => d.t >= sleptAt - 60000).pop();
+  try { r = await brain.welcomeBack({ awayMinutes: away, recent, upcoming, dueReminders: due, dream: dreamt ? `${dreamt.title} (${dreamt.why})` : '' }); } catch (e){ log('welcome failed:', e.message); }
   const last = timeline.summary(sleptAt - 3600_000, sleptAt, 1).replace(/^- /, '').replace(/ \(.*$/, '');
   toUI('say', r?.text ? { text: r.text, mood: r.mood || 'happy', action: r.action || 'wave', welcome: { recent } }
     : { text: `Welcome back! ${last ? 'You were in ' + last + '.' : 'Ready when you are!'}`, mood: 'happy', action: 'wave', welcome: { recent } });
@@ -518,12 +581,13 @@ async function tick(){
   else if (sleeping && !manualNap && idle < 3 && powerMonitor.getSystemIdleState(60) === 'active') wakeUp(true);
   if (!sleeping){
     const w = await winwatch.win();
-    if (w?.title) { const changed = !current || current.app !== w.app || current.title !== w.title; current = w; timeline.record(w);
+    if (w?.title) { const changed = !current || current.app !== w.app || current.title !== w.title; current = w; timeline.record(w); if (!timeline.paused() && idle < 60) habits.app(w.app, w.title, 5);
       if (changed && !timeline.paused()) toUI('activity', { app: w.app, title: w.title.slice(0, 160), activeMin: Math.round((Date.now() - focusSince) / 60000) }); }
     // fun nudge after a long focus stretch (not in quiet mode)
     if (!quiet && Date.now() - lastStretch > 100 * 60_000 && idle < 60){ lastStretch = Date.now();
       toUI('say', { text: ['You\'ve been at it for over an hour and a half! Stretch break? I\'ll stretch with you.', 'Hydration check! When did you last drink some water?', 'Shoulders down, deep breath… okay, back to being awesome.'][Math.floor(Math.random() * 3)], mood: 'happy', action: 'dance' }); }
     initiative.tick({ idle, win: timeline.paused() ? null : current }).catch(e => log('initiative tick failed:', e.message));
+    { const h = new Date().getHours(); if (idle < 30 && h >= 10 && h < 20 && !uiStatus.inCall && !uiStatus.game && !uiStatus.busy && !fixing && evo.due()) runEvolution(); }
   }
   for (const r of reminders.due()){
     reminders.done(r.id); if (sleeping) { sleeping = false; manualNap = false; dozing = false; uiStatus.touched = Date.now(); toUI('wake'); }

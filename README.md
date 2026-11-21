@@ -38,7 +38,7 @@ You can also drop a file on the head to store it in Drive.
 
 - **Click the orange mic** on its headset, or press **Ctrl+Alt+M** (or Ctrl+Alt+Space). It stops listening by itself when you pause.
 - **Follow-up:** after it answers something you said, it listens about 6 seconds more, so you can just keep chatting. Say "bye" or "that's all" to end.
-- **Two voices, to save credits:** answers to your questions use ElevenLabs. Everything the buddy says on its own (reminders, meeting alerts, pet chatter, level-ups, ideas) uses a free Windows voice as a chime + "Attention please…" announcement. Pick the voice, style and chime under right-click → 📢 Announcement voice….
+- **Voice:** ElevenLabs speaks what matters: answers to you, reminders and meeting alerts (with a little chime), conversations it starts, welcome back and evolution day. Pet chatter, game lines and status messages are bubble-only, to save credits.
 - **Hands-free switches itself off** while the buddy's music plays (and back on after), and pops up choices (off / off for 1 hour / off till the meeting ends / keep listening) when a meeting starts, a call app or Spotify/YouTube is in front, or it's been noisy for a minute.
 - **Hands-free (Ctrl+Alt+H):** say "Hey <its name>, …" or "Hey Buddy, …". Each time someone speaks near the PC, a short clip goes to speech-to-text to check for the name, so this uses credits.
 
@@ -183,3 +183,9 @@ Uses the official Minds CLI (`@animocabrands/minds-cli`, installed by `npm insta
 | `node mind.mjs ask "Hi!"` | one message on a separate test chat |
 | `node mind.mjs selftest` | 3 checks that your Mind follows the buddy's rules (mood tags, reminders, arcade level design) |
 | `node mind.mjs raw <args>` | any other CLI command, e.g. `raw circle list` |
+
+## Living dreams
+While it sleeps, the buddy projects 3D hologram dreams about you and your pup. Besides the built-in ones, your Mind designs new dreams from what you've been into lately (music you play, the kinds of apps you use, your favourite arcade game, what you told it): a recipe of place, props, what you and the dog do, sky, weather, colours and a glowing sign, which the hologram builds from a library of ~40 light props. The newest plays first; it mentions the dream when you come back. Right-click → 💭 Dreams → ✨ Dream something new now. Only categories (not window titles) and the songs/stations you played are kept, in habits.json on your PC.
+
+## Weekly evolution
+Once a week (first one a day after you install), your Mind looks back at your week and grows the buddy: it designs a **new outfit** (cap, beret, headband, halo, bow, flowers, scarf, visor… in its own colours and badge), a **weekly arcade quest** to win it, a **new dream**, and **one idea for a new feature**. Approve ideas with 👍 and they're saved to `IDEAS.md` in this folder: bring it to your next build session. Right-click → 🌱 Evolution → ✨ Evolve now to try it (1 Mind message).

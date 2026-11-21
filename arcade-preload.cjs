@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('arcade', {
   result: r => ipcRenderer.send('arcade-result', r),
   event: e => ipcRenderer.send('arcade-event', e),
   close: () => ipcRenderer.send('arcade-close'),
+  weekly: () => ipcRenderer.invoke('arcade-weekly'),
   onGame: fn => ipcRenderer.on('arcade-game', (e, name) => fn(name)),
 });

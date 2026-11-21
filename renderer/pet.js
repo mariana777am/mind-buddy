@@ -20,7 +20,7 @@ const COLORS = { classic: ['#3a3f4f', '#202431', '#2a2e3b'], pink: ['#ef6aa7', '
 const xpFor = L => 40 * L * L;                                     // XP needed to reach level L+1
 
 const P = Object.assign({ snack: 80, fun: 80, love: 80, energy: 80, xp: 0, level: 1, streak: 0, lastDay: '', wearing: null, color: 'classic',
-  focusDone: 0, focus: null, last: Date.now(), born: Date.now(), wins: 0, flags: {} }, {});
+  focusDone: 0, focus: null, last: Date.now(), born: Date.now(), wins: 0, flags: {}, evo: [] }, {});
 let loaded = false, saveT = null, lastTouch = now(), lastNag = 0, muteUntil = 0, inCall = false, callSeen = 0;
 const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { P.last = Date.now(); B.storeSet?.('pet', P); sendNote(); }, 400); };
 const clamp = v => Math.max(5, Math.min(100, v));
@@ -471,6 +471,9 @@ B.on.cmd?.(({ type, arg }) => {
 });
 bubble.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.pet === 'idea-yes' || b.dataset.pet === 'idea-no') { const yes = b.dataset.pet === 'idea-yes'; B.ideaAnswer?.(b.dataset.arg, yes); sfx(yes ? 'ding' : 'boop');
+    const box = b.closest('.btns'); if (box) box.outerHTML = `<div class="btns"><i>${yes ? '👍 Added to my upgrade list (IDEAS.md)!' : 'Okay, maybe another time!'}</i> <button data-pet="arcade" data-arg="${esc(b.dataset.game || '')}">🕹️ Play the quest</button></div>`;
+    if (yes) { act('cheer'); burst(['💡', '✨'], 10); } return; }
   if (b.dataset.rps) rpsPlay(b.dataset.rps);
   if (b.dataset.quiz) quizAnswer(b.dataset.quiz);
   if (b.dataset.wyr) wyrAnswer(Number(b.dataset.wyr));
@@ -483,7 +486,7 @@ bubble.addEventListener('click', e => {
 function menuState(){
   const un = UNLOCKS.filter(u => u.level <= P.level), next = UNLOCKS.find(u => u.level > P.level);
   return { level: P.level, focusing: !!P.focus, wearing: P.wearing, color: P.color,
-    unlocked: un.filter(u => u.id).map(u => ({ id: u.id, label: u.label })),
+    unlocked: [...un.filter(u => u.id).map(u => ({ id: u.id, label: u.label })), ...(P.evo || []).map(o => ({ id: o.id, label: `✨ ${o.badge ? o.badge + ' ' : ''}${o.name}` }))],
     colors: [{ id: 'classic', label: '🎧 Classic' }, ...un.filter(u => u.color).map(u => ({ id: u.color, label: u.label }))],
     nextUnlock: next ? `Next: ${next.label} at level ${next.level}` : 'Everything unlocked! 🏆' };
 }
@@ -491,9 +494,63 @@ function chatted(r){ lastTouch = now(); bump({ love: 2, fun: 1 }, 2); }
 function onAct(a){ if (a === 'jump' || a === 'cheer') sfx('boop', .6); }
 function applyColor(){ const c = COLORS[P.color] || COLORS.classic; Object.assign(BUDDY_COLORS, { band: c[0], band2: c[1], cup: c[2] }); }
 
+// ---------- weekly evolution: a new outfit to win, a new dream, an upgrade idea ----------
+const EVO_COLORS = { pink: ['#ff6fb0', '#ffd1e6'], mint: ['#3fd1ab', '#c9fff0'], sky: ['#4fb6ff', '#d6efff'], sunset: ['#ff8a3d', '#ffd84d'], gold: ['#f2bd3a', '#fff1b8'],
+  lavender: ['#a78bfa', '#ede4ff'], cherry: ['#ff4d6d', '#ffe0e6'], ocean: ['#2563eb', '#7dd3fc'], lime: ['#84cc16', '#ecfccb'], mono: ['#1f2937', '#f9fafb'] };
+let peek = null;                                                    // a short sneak peek of the outfit you can win
+B.on.evolution?.(ev => {
+  P.flags.lastEvolution = ev.id; save();
+  later(() => {
+    sfx('fanfare'); act('jump'); burst(['🌱', '✨', '⭐'], 18); S.mood = 'excited';
+    peek = { outfit: ev.outfit, until: now() + 9000 };
+    const o = ev.outfit, q = ev.quest;
+    show(`<span class="tag q">🌱 evolution</span><br><b>${esc(ev.title)}</b>` +
+      `<div style="margin-top:5px">👕 New outfit <b>${esc((o.badge ? o.badge + ' ' : '') + o.name)}</b> (sneak peek!). Win it: ⭐ <b>${esc(q.name)}</b> — beat me at ${esc(ev.gameLabel || q.game)} with “${esc(q.twistText)}”.</div>` +
+      (ev.dream ? `<div style="margin-top:4px">💭 Tonight's dream: ${esc(ev.dream)}</div>` : '') +
+      (ev.idea ? `<div style="margin-top:4px">💡 Upgrade idea for me: <b>${esc(ev.idea.text)}</b>${ev.idea.why ? ` <i>(${esc(ev.idea.why)})</i>` : ''}</div>` +
+        `<div class="btns"><button data-pet="idea-yes" data-arg="${esc(ev.id)}" data-game="${esc(q.game)}">👍 Build it</button><button class="alt" data-pet="idea-no" data-arg="${esc(ev.id)}" data-game="${esc(q.game)}">Not now</button></div>`
+        : `<div class="btns"><button data-pet="arcade" data-arg="${esc(q.game)}">🕹️ Play the quest</button></div>`), { stick: true });
+    speak(ev.note || `Evolution time! I designed a new outfit, and you can win it this week.`, 'excited', { important: true });
+  });
+});
+B.on.evolutionReward?.(q => {
+  const o = q.outfit; if (!o) return;
+  if (!(P.evo ||= []).some(x => x.id === o.id)) P.evo.push(o);
+  P.wearing = o.id; gainXp(50); save();
+  later(() => { sfx('fanfare'); act('cheer'); burst(['⭐', '🎉', '👕', '✨'], 24);
+    say({ text: `Quest complete! I'm wearing my new ${o.name} now. Thank you! You also earned 50 XP.`, mood: 'excited', action: 'cheer' }); });
+});
+function drawEvo(cx, t, R, o, ey){
+  const [c1, c2] = EVO_COLORS[o.color] || EVO_COLORS.pink;
+  const badge = (x, y, s = .3) => { if (!o.badge) return; cx.save(); cx.font = `${Math.round(R * s)}px "Segoe UI Emoji","Apple Color Emoji",sans-serif`; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText(o.badge, x, y); cx.restore(); };
+  cx.save();
+  if (o.kind === 'cap') { cx.fillStyle = c1; cx.beginPath(); cx.arc(0, -R * .38, R * .78, Math.PI, Math.PI * 2); cx.closePath(); cx.fill();
+    cx.beginPath(); cx.ellipse(-R * .55, -R * .4, R * .55, R * .11, -.12, 0, 7); cx.fill(); cx.fillStyle = c2; cx.beginPath(); cx.arc(0, -R * 1.15, R * .07, 0, 7); cx.fill(); badge(R * .05, -R * .72); }
+  if (o.kind === 'beret') { cx.fillStyle = c1; cx.beginPath(); cx.ellipse(R * .12, -R * .86, R * .74, R * .22, -.18, 0, 7); cx.fill(); cx.fillRect(R * .18, -R * 1.16, R * .06, R * .12); badge(R * .42, -R * .86, .24); }
+  if (o.kind === 'headband' || o.kind === 'sweatband') { cx.lineCap = 'round'; cx.strokeStyle = c1; cx.lineWidth = R * (o.kind === 'sweatband' ? .2 : .13);
+    cx.beginPath(); cx.arc(0, R * .12, R * 1.0, Math.PI * 1.17, Math.PI * 1.83); cx.stroke();
+    if (o.kind === 'sweatband') { cx.strokeStyle = c2; cx.lineWidth = R * .04; cx.beginPath(); cx.arc(0, R * .12, R * 1.0, Math.PI * 1.17, Math.PI * 1.83); cx.stroke(); }
+    badge(R * .42, -R * .76, .24); }
+  if (o.kind === 'halo') { cx.strokeStyle = c1; cx.shadowColor = c1; cx.shadowBlur = 14; cx.lineWidth = R * .07; const y = -R * 1.22 + Math.sin(t * 2) * R * .04;
+    cx.beginPath(); cx.ellipse(0, y, R * .55, R * .13, 0, 0, 7); cx.stroke(); cx.shadowBlur = 0; badge(R * .6, y - R * .05, .2); }
+  if (o.kind === 'bow') { cx.translate(R * .55, -R * .82); cx.rotate(.35); cx.fillStyle = c1;
+    [-1, 1].forEach(s => { cx.beginPath(); cx.moveTo(0, 0); cx.quadraticCurveTo(s * R * .62, -R * .5, s * R * .58, 0); cx.quadraticCurveTo(s * R * .62, R * .46, 0, 0); cx.fill(); });
+    cx.fillStyle = c2; cx.beginPath(); cx.arc(0, 0, R * .13, 0, 7); cx.fill(); cx.rotate(-.35); badge(0, R * .02, .18); }
+  if (o.kind === 'flowers') { for (let i = 0; i < 5; i++){ const a = Math.PI * (1.18 + i * .16), x = Math.cos(a) * R * .96, y = Math.sin(a) * R * .96 + R * .05;
+      cx.fillStyle = i % 2 ? c2 : c1; for (let k = 0; k < 5; k++){ const b = k / 5 * 6.283 + t * .3; cx.beginPath(); cx.arc(x + Math.cos(b) * R * .08, y + Math.sin(b) * R * .08, R * .07, 0, 7); cx.fill(); }
+      cx.fillStyle = '#ffd84d'; cx.beginPath(); cx.arc(x, y, R * .05, 0, 7); cx.fill(); } badge(0, -R * 1.12, .22); }
+  if (o.kind === 'scarf') { cx.fillStyle = c1; cx.beginPath(); cx.roundRect(-R * .72, R * .84, R * 1.44, R * .26, R * .12); cx.fill();
+    cx.beginPath(); cx.roundRect(R * .3, R * .9, R * .24, R * .5, R * .08); cx.fill(); cx.fillStyle = c2; for (let i = -2; i <= 2; i++) cx.fillRect(i * R * .26 - R * .04, R * .86, R * .08, R * .22); badge(-R * .3, R * .97, .2); }
+  if (o.kind === 'visor') { const g = cx.createLinearGradient(-R * .8, 0, R * .8, 0); g.addColorStop(0, c1); g.addColorStop(1, c2); cx.globalAlpha = .82; cx.fillStyle = g;
+    cx.beginPath(); cx.roundRect(-R * .78, ey - R * .16, R * 1.56, R * .32, R * .16); cx.fill(); cx.globalAlpha = .7; cx.strokeStyle = '#ffffff'; cx.lineWidth = 2;
+    cx.beginPath(); cx.moveTo(-R * .55, ey - R * .07); cx.lineTo(-R * .1, ey - R * .07); cx.stroke(); cx.globalAlpha = 1; badge(R * .62, ey - R * .26, .18); }
+  cx.restore();
+}
+
 // ---------- drawing: accessories, props, special eyes ----------
 const hourNow = () => new Date().getHours();
 function wearing(){
+  if (peek && now() < peek.until) return peek.outfit.id;
   if (P.focus) return 'shades';
   if (S.asleep && (hourNow() >= 22 || hourNow() < 6)) return 'nightcap';
   if (!P.wearing && new Date().getDay() === 5 && hourNow() >= 15) return 'party';
@@ -503,6 +560,7 @@ function drawBack(cx, t, R){ if (wearing() === 'flower') { /* drawn in front */ 
 function drawFront(cx, t, R){
   const w = wearing(), ey = -R * .12, gap = R * .27;
   cx.save();
+  if (w && String(w).startsWith('evo:')) { const o = (peek && peek.outfit.id === w) ? peek.outfit : (P.evo || []).find(x => x.id === w); if (o) drawEvo(cx, t, R, o, ey); }
   if (w === 'shades' && !S.asleep) {
     cx.fillStyle = '#111827';
     [-1, 1].forEach(s => { cx.beginPath(); cx.roundRect(s * gap - 17, ey - 11, 34, 22, 9); cx.fill(); });

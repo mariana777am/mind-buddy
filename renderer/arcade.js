@@ -584,6 +584,11 @@ async function startGame(name){
   gameName = name; lv = getLv(name); overEl.classList.add('hidden'); menuEl.classList.remove('hidden'); phase = 'intro'; game = null;
   const diary = AD.load(localStorage), summary = AD.summarize(name, diary, { lv });
   design = AD.autoDesign(name, diary);
+  // this week's evolution quest: the Mind's twist for this game, and winning it earns the new outfit
+  const weekly = await withTimeout(Promise.resolve(A.weekly?.()).catch(() => null), 800);
+  const applyWeekly = d => { if (!weekly || weekly.game !== name) return d; const tw = AD.TWISTS[name][weekly.twist] ? weekly.twist : d.twist;
+    return { ...d, twist: tw, twistText: AD.TWISTS[name][tw], name: '⭐ ' + weekly.name, weekly: true, habit: d.habit || 'Win this one to unlock my new outfit!' }; };
+  design = applyWeekly(design);
   const info = GAMES[name](lv, 'tricky', design);
   menuEl.innerHTML = `<div class="card"><div class="sub">level ${lv} · you vs ${esc(NAME)}</div><h1>${LABEL[name]}</h1><div class="design" id="design">${designHTML(design, true)}</div><p class="help">${info.help}</p><p class="keys">${info.keys}</p>
     <p class="taunt" id="taunt">${esc(NAME)} is warming up…</p><p class="style" id="style"></p><div class="row"><button class="go" id="go">Start</button></div><p class="keys">Esc closes · P pauses</p></div>`;
@@ -593,7 +598,7 @@ async function startGame(name){
   const kd = e => { if (e.code === 'Enter' || e.code === 'Space') go(); };
   document.getElementById('go').onclick = go; addEventListener('keydown', kd);
   pre.then(p => { style = p.style; const dz = document.getElementById('design');
-    if (!ready) { if (p.design) design = p.design; if (dz) dz.innerHTML = designHTML(design, false, p.design ? '' : 'your Mind was busy'); }
+    if (!ready) { if (p.design) design = applyWeekly(p.design); if (dz) dz.innerHTML = designHTML(design, false, p.design ? '' : 'your Mind was busy'); }
     const el = document.getElementById('taunt'); if (el && !ready) { el.textContent = `“${p.line || pick(LOCAL_TAUNTS)}”`; document.getElementById('style').textContent = `${p.style} mode`; } if (ready && p.line) say(p.line, 3, W / 2, 150); });
   async function begin(){
     menuEl.classList.add('hidden'); game = GAMES[name](lv, style, design); phase = 'count'; countdown = 3.999; sfx('count'); startedAt = now();
@@ -606,7 +611,7 @@ async function finish(res){
   sfx(won ? 'win' : tie ? 'go' : 'lose');
   if (won) for (let i = 0; i < 7; i++) setTimeout(() => { const x = rnd(120, W - 120), y = rnd(100, 300), c = pick(['#ffe08a', '#ff7ad9', '#5fd4ff', '#9dffcf']); burst(x, y, c, 40, 320); ring(x, y, c, 120, 3); }, i * 200);
   setLv(gameName, lv + (won ? 1 : tie ? 0 : -1));
-  const result = { game: gameName, won, tie, score: res.score, level: lv, design: design?.name };
+  const result = { game: gameName, won, tie, score: res.score, level: lv, design: design?.name, weekly: !!design?.weekly };
   AD.save(localStorage, AD.record(AD.load(localStorage), { game: gameName, won, tie, you: res.you, bud: res.bud, lv, dur: now() - startedAt, stats: res.stats, design }));
   A.result?.(result);
   overEl.classList.remove('hidden');

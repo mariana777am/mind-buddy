@@ -209,12 +209,15 @@ function typewrite(text, prefix = '', ms, force = false){
 
 // ---------- voice out ----------
 let audio = null, ac = null, an = null, data = null;
-// Answers to your questions: ElevenLabs (paid). Everything the buddy says on its own: the free Windows announcement voice.
-async function speak(text, mood, { silent = false, answer = false, kind = '' } = {}){
-  if (!silent && text && !INFO.quiet) duck();
+// Voice rule: ElevenLabs speaks what matters (answers to you, reminders, meeting alerts, its own conversation starters,
+// welcome back, evolution day). Everything else (pet chatter, game lines, status) is a bubble only. No robot voice.
+async function speak(text, mood, { silent = false, answer = false, important = false, kind = '' } = {}){
+  const voiced = !silent && text && !INFO.quiet && !window.PET?.muted() && (answer || important);
+  if (voiced) duck();
   stopSpeaking();
-  if (silent || INFO.quiet || window.PET?.muted() || !text) { if (!silent) setTimeout(afterSpeaking, Math.min(6000, 1500 + text.length * 45)); return; }
-  const bytes = answer ? await B.tts(text, mood).catch(() => null) : null;
+  if (!voiced) { if (!silent && text) setTimeout(afterSpeaking, Math.min(6000, 1500 + text.length * 45)); return; }
+  if ((kind === 'meeting' || kind === 'reminder') && window.ANN) await ANN.chime(ANN.cfg.chime === 'none' ? 'dingdong' : ANN.cfg.chime, 'open', .2);   // a little ding first
+  const bytes = await B.tts(text, mood).catch(() => null);
   if (bytes && bytes.byteLength){
     const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
     audio = new Audio(url);
@@ -223,10 +226,7 @@ async function speak(text, mood, { silent = false, answer = false, kind = '' } =
     audio.play().catch(() => { S.talking = false; });
     return;
   }
-  if (!window.ANN) { afterSpeaking(); return; }
-  ANN.say(text, mood, { announce: !answer, answer, kind,
-    onstart: () => { S.talking = true; }, onboundary: () => { S.mouth = 1; },
-    onend: () => { S.talking = false; S.mouth = 0; afterSpeaking(); } });
+  setTimeout(afterSpeaking, Math.min(6000, 1500 + text.length * 45));   // ElevenLabs unavailable: the bubble carries it
 }
 function stopSpeaking(){ try { audio?.pause(); } catch (_) {} audio = null; window.ANN?.stop(); S.talking = false; }
 setInterval(() => {                                     // mouth follows the real loudness
@@ -243,7 +243,7 @@ function say({ text, mood, action, silent, interim, welcome, answer, choices, pr
   if (mood) S.mood = mood; if (action) act(action);
   let extra = '';
   if (welcome?.recent) extra = `<div><span class="more" onclick="this.nextElementSibling.hidden=!this.nextElementSibling.hidden">📋 where you left off</span><pre class="recent" hidden>${esc(welcome.recent)}</pre></div>`;
-  if (interim) { const h = esc(text) + ' <span class="dots"><span>.</span><span>.</span><span>.</span></span>'; if (pending > 0) thinkingHTML = h; show(h, { stick: true, force: true }); speak(text, mood, { silent, answer: true }); return; }
+  if (interim) { const h = esc(text) + ' <span class="dots"><span>.</span><span>.</span><span>.</span></span>'; if (pending > 0) thinkingHTML = h; show(h, { stick: true, force: true }); speak(text, mood, { silent: true }); return; }   // "let me check…" while the Mind works: shown, not spoken
   typewrite(text, '', welcome ? 14000 : undefined, !!answer);
   if (proactive) {
     window.SCENES?.react({ text, scene, show: showList, fx }, '');
@@ -254,7 +254,7 @@ function say({ text, mood, action, silent, interim, welcome, answer, choices, pr
     if (now() - lastVoiceUse < 30 * 60000) convo = true;                 // you've been talking by voice: just answer out loud
   }
   if (extra) setTimeout(() => bubble.insertAdjacentHTML('beforeend', extra), 30);
-  speak(text, mood, { silent, answer: !!answer });
+  speak(text, mood, { silent, answer: !!answer, important: !!(proactive || welcome) });
   setTimeout(() => { if (!S.talking && S.mood !== 'sleepy') S.mood = 'happy'; }, 9000);
 }
 async function askMind(text, { spoken = false } = {}){
@@ -271,7 +271,7 @@ async function askMind(text, { spoken = false } = {}){
   pending = Math.max(0, pending - 1); clearTimeout(noteT);
   S.thinking = pending > 0; sticky = false;
   if (!r) return hide();
-  say({ ...r, answer: true }); window.PET?.chatted(r); window.SCENES?.react(r, text);
+  say({ ...r, answer: !(r.late || r.error) }); window.PET?.chatted(r);   // only a real reply uses ElevenLabs; "still working" / errors use the free voice window.SCENES?.react(r, text);
   for (const d of r.done || []){
     if (d.type === 'remind') { burst(['⏰'], 3); chipFlash('⏰ reminder set'); }
     if (d.type === 'event') { burst(['📅'], 3); chipFlash('📅 added to calendar'); }
@@ -303,7 +303,7 @@ B.on.alert(al => {
   const hfBtn = al.kind === 'meeting' && al.startingNow && HF.on ? `<div class="btns"><button data-hf="meeting" data-until="${al.endsAt || ''}">🔇 Hands-free off till it ends</button></div>` : '';
   if (hfBtn) HF.asked.meeting = now();
   show(`${tag}<br><b>${esc(al.text)}</b><div class="btns">${btns}</div>${hfBtn}`, { stick: true });
-  speak(al.say, S.mood, { kind: al.kind });
+  speak(al.say, S.mood, { kind: al.kind, important: true });
 });
 B.on.confirm(({ id, question }) => {
   undim(); S.asleep = false; S.slipT = 0; S.mood = 'curious'; act('think');

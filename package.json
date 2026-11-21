@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "mind": "node mind.mjs",
-    "test": "node test/unit.test.mjs && node test/initiative.test.mjs && node test/music.test.mjs && node test/relay.test.mjs && node test/arcade-design.test.mjs"
+    "test": "node test/unit.test.mjs && node test/initiative.test.mjs && node test/music.test.mjs && node test/relay.test.mjs && node test/arcade-design.test.mjs && node test/dreams.test.mjs && node test/evolution.test.mjs"
   },
   "dependencies": {
     "@animocabrands/minds-client-lib": "^0.1.7"
